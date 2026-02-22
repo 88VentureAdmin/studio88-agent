@@ -663,6 +663,10 @@ ${liveLogContent.slice(-6000)}`,
   console.log('\nJin is running.');
   console.log('Supports: text, images/screenshots, website URLs, Google Drive/Docs links');
   console.log('Memory: Live Log + Weekly Digest loaded at startup, auto-written after conversations\n');
+
+  // Health check server for Railway (expects something on PORT)
+  const port = process.env.PORT || 3000;
+  http.createServer((req, res) => res.end('Jin is alive.')).listen(port);
 }
 
 main().catch((err) => {
