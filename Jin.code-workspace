@@ -1,0 +1,12 @@
+{
+  "folders": [
+    {
+      "uri": "vscode-remote://ssh-remote+agentserver@Agents-Mac-mini.local/Users/agentserver/studio88-agent",
+      "name": "Jin — Studio 88"
+    }
+  ],
+  "settings": {
+    "terminal.integrated.defaultProfile.linux": "zsh",
+    "task.allowAutomaticTasks": "on"
+  }
+}

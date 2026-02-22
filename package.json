@@ -1,0 +1,21 @@
+{
+  "name": "studio88-agent",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node agent.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@slack/bolt": "^4.6.0",
+    "dotenv": "^17.3.1",
+    "googleapis": "^171.4.0",
+    "mammoth": "^1.11.0"
+  }
+}

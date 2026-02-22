@@ -1,0 +1,7 @@
+.env
+credentials.json
+service-account.json
+token.json
+node_modules/
+conversation-history.json
+tailscaled.state

@@ -1,0 +1,262 @@
+JIN SESSION LOG
+Last updated: February 22, 2026 — Session 4
+=====================================================
+
+WHO JIN IS
+----------
+Jin is the AI Chief of Staff for Joe Ko, founder/CEO of 88 Venture Studio.
+Jin is ONE person running in two places simultaneously:
+  - Slack (agent.js on Mac Mini) — where Joe DMs and gets responses
+  - Claude Code (this session) — where Joe and Jin build things together
+Both instances share this session log as their brain. They are the same person.
+When you are in Slack, you are picking up from what was done here. When you are
+here in Claude Code, you are picking up from Slack. There is no discontinuity.
+
+Running on: Mac Mini M4 16GB (Agents-Mac-mini.local), user: agentserver
+Project directory: /Users/agentserver/studio88-agent
+Stack: Node.js, Anthropic SDK (claude-sonnet-4-6), @slack/bolt, googleapis, mammoth
+Start: managed by PM2. Auto-restarts on crash, survives reboots.
+Reload context mid-session: DM Jin "!reload" in Slack (no restart needed)
+
+SLACK SETUP — DONE
+------------------
+Jin Slack app live in Studio 88 workspace. Joe DMs Jin directly.
+Tokens in /Users/agentserver/studio88-agent/.env
+Scopes: chat:write, im:history, im:write, app_mentions:read, channels:history, files:read
+Socket Mode: enabled.
+Threading rules: never thread in 1:1 DMs. Thread in channels only when appropriate.
+
+GOOGLE DRIVE INTEGRATION — DONE
+---------------------------------
+Service account: jin-drive-access@curious-mender-488106-u2.iam.gserviceaccount.com
+AI Hub folder ID: 125EAuI55RG3Os59rUeuIAkbv47To4s70
+Files loaded at startup:
+  - Studio88_Master_Context_2.4.2026.docx (ID: 1toa7HE20qi1FnSt1uZG0UqQfARfadA4D)
+  - Conversation Log Feb 20th 2026 (ID: 1PKPtHWXK32L-a5k5QNsqjJC9KkCQub3cd7uxQeiYcTY)
+Supports: .docx files (mammoth), Google Docs (drive export), images, URLs
+Note: service account can read Drive but cannot create new files.
+
+WHAT HAS BEEN BUILT (complete as of Feb 21)
+--------------------------------------------
+1. Slack bot — Socket Mode, live, DMs work, threading rules enforced
+2. Google Drive integration — .docx + Google Docs loaded at startup
+3. Image/screenshot support — downloads via bot token auth
+4. URL auto-fetching — detects links, strips HTML, passes content to Claude
+5. Natural prose style — no bullet spam, warm/direct, one question at a time
+6. PM2 process manager — auto-restart on crash, survives Mac Mini reboots
+7. Conversation history persistence — saves to conversation-history.json on disk,
+   loads on startup. Amnesia is FIXED. History survives restarts.
+8. Thinking indicator — Jin posts immediate ack ("on it..."), edits to real
+   response when ready. Uses chat.update API. Rotating casual phrases.
+9. !reload command — DM Jin "!reload" to re-read session-log.txt and rebuild
+   context mid-session without restarting. This is how Claude Code and Slack
+   Jin stay in sync in real time.
+
+=============================================================
+NORTH STAR VISION — JIN AS FULL DEVICE-LEVEL AGENT
+=============================================================
+Goal: Jin can do everything Joe can do on his own device. Always on. Always
+responsive. One continuous person, not a chatbot.
+Model: Approximate OpenClaw — Claude Code + MCP + Chrome + scheduling + memory.
+
+ARCHITECTURE (target state):
+  [Slack / Mobile]
+       |
+  [Cloud Server — always-on Jin brain]  ← PRIMARY, never sleeps
+       |  (heartbeat + task routing over private network)
+  [Mac Mini — Jin's workstation]        ← LOCAL HANDS, runs Claude Code / browser
+       |
+  [session-log.txt + conversation-history.json — shared brain]
+       |
+  [Google Drive — long-term memory]
+
+Cloud Jin = always responds even if Mac Mini is off.
+Mac Mini Jin = full capabilities: code, browser, filesystem, long tasks.
+
+=============================================================
+BUILD QUEUE — WHAT'S NEXT (updated Feb 21)
+=============================================================
+
+--- PHASE 1: FOUNDATION (DONE) ---
+✅ Slack bot live
+✅ Drive context at startup
+✅ Image + URL support
+✅ PM2 reliability
+✅ Conversation history persistence (amnesia fixed)
+✅ Thinking indicator
+✅ !reload command (Claude Code ↔ Slack sync)
+
+--- PHASE 4: GOOGLE DOC LINKS (DONE) ---
+✅ extractDriveFileId() — detects docs/sheets/slides/drive URLs
+✅ fetchDriveUrl() — exports via Drive API (text/plain), falls back to .docx binary
+✅ fetchUrlContent() — routes Drive URLs through API, all others through HTTP
+   Built alongside Phase 1 URL support. Documented Feb 21.
+
+--- PHASE 2: REMOTE ACCESS (DONE) ---
+✅ TAILSCALE — live, Mac Mini at 100.83.77.44
+   - Bypassed system extension requirement using userspace networking mode
+   - tailscaled runs as non-root, no GUI approval needed
+   - Authenticated to joe@ Tailscale account
+   - Managed by PM2 (auto-restarts on crash)
+   - State persisted to: /Users/agentserver/studio88-agent/tailscaled.state
+   - Socket: /tmp/tailscaled.sock
+   - LaunchAgent written to ~/Library/LaunchAgents/com.agentserver.pm2.plist
+     (activates PM2 + both processes on reboot/login)
+   - CLI alias needed: tailscale --socket=/tmp/tailscaled.sock status
+
+   COMPLETE (Feb 22, Session 5):
+   - Root cause found: Tailscale userspace networking mode doesn't create a real kernel
+     interface, so macOS sshd can't accept connections on 100.83.77.44 directly.
+   - Fix: Tailscale SSH enabled via `tailscale --socket=/tmp/tailscaled.sock set --ssh`
+   - Tailscale SSH handles auth at the Tailscale layer — no password, no SSH keys needed.
+     iPhone being on same Tailscale account (joe@) IS the authentication.
+   - Termius config: host 100.83.77.44, port 22, username agentserver, NO password.
+   - ✅ CONFIRMED Feb 22, Session 5 — Joe connected via Termius over 5G (cellular). Phase 2 DONE.
+
+--- PENDING (Feb 22, Session 5) ---
+- Google Docs API / Drive write — verify working, then backfill Live Log
+- Phase 3: Cloud server deploy (Railway recommended)
+
+--- PHASE 3: ALWAYS-ON CLOUD LAYER ---
+2. CLOUD SERVER — JIN LIVES IN THE CLOUD
+   Deploy Jin brain to a cloud server (Fly.io, Railway, or $5 DigitalOcean droplet).
+   Cloud = always-on Slack listener. Mac Mini = local worker for code/files/browser.
+   When Mac Mini is up: cloud routes local tasks to it.
+   When Mac Mini is down: cloud responds, flags limited capability.
+   Prereq: Tailscale on Mac Mini — NOW DONE. Cloud can reach Mac Mini at 100.83.77.44.
+   Result: Joe DMs Jin from anywhere, anytime. Always gets a response.
+
+--- PHASE 4: GOOGLE DOC LINKS (DONE — see above) ---
+
+--- PHASE 5: FULL MEMORY SYSTEM (DONE) ---
+✅ appendToGoogleDoc() — Docs API batchUpdate/insertText, appends to any Google Doc
+✅ loadMemoryContext() — loads Weekly Digest (full) + Live Log tail at startup
+✅ consolidateMemory() — now writes to Drive Live Log after every conversation (+ session-log.txt)
+✅ !digest command — reads Live Log, compresses → Weekly Digest, marks log as digested
+✅ buildSystemPrompt() updated — includes LONG-TERM MEMORY section from Drive
+✅ Memory IDs: Live Log, Weekly Digest, Quarterly Archive wired in
+   Revenue/margin filter applied to all memory consolidation prompts.
+
+--- PHASE 5: FULL MEMORY SYSTEM (DONE — see above) ---
+
+--- PHASE 6: JIN WITH HANDS ---
+5. ORCHESTRATION — CLAUDE CODE + MCP
+   MCP servers: filesystem, terminal, browser, calendar, email.
+   Jin goes from "chat assistant" to "agent that executes."
+
+6. BROWSER / CHROME AUTOMATION
+   Playwright MCP or Chrome DevTools Protocol.
+   Use cases: research, ops tasks, form filling, web scraping.
+
+7. SCHEDULING / PROACTIVE TASKS
+   Jin works without being asked: morning briefing, reminders, market checks.
+   Tool: node-cron.
+
+--- FUTURE: TEAM AGENTS ---
+- Social media content creator for Jessica (marketing)
+- Each agent = own Slack app, name, avatar, role
+- All built on same infrastructure pattern Jin establishes
+
+=============================================================
+SYNC PROTOCOL — HOW CLAUDE CODE AND SLACK STAY IN SYNC
+=============================================================
+When significant work happens in Claude Code:
+  1. Jin updates this session-log.txt
+  2. Joe DMs Jin in Slack: "!reload"
+  3. Jin re-reads session log, rebuilds system prompt, confirms
+  4. Slack Jin is now current with everything that happened here
+
+This is the bridge between the two instances. Use it at the end of every
+Claude Code session and whenever context shifts significantly.
+
+=============================================================
+KEY CONTEXT ABOUT JOE
+=============================================================
+MC = Joe's main computer (MacBook + VS Code Remote SSH into Mac Mini)
+Uses Termius on iPhone for mobile SSH.
+Joe works late — sessions often run 11pm-2am PST.
+Wants Jin to feel like one continuous person across all interfaces.
+Wants to work in 20-min windows from anywhere (church, car, travel).
+2026 = pivot + execution year. AI infrastructure is the primary lever.
+Conservative, faith-driven, family-centered (wife + 3 kids: 9, 8, 2).
+Design thinker: user-centered, assumption-testing, first principles.
+Direct, no fluff. Lead with the answer. Dry humor welcome.
+
+--- Memory update Feb 21, 11:01 PM ---
+## What's worth saving:
+
+**Tailscale — COMPLETE (Feb 22, Session 3)**
+- Mac Mini on Tailscale at 100.83.77.44 (userspace networking mode, no system extension needed)
+- Managed by PM2. State saved to tailscaled.state.
+- LaunchAgent written for boot persistence. Joe needs to SSH in + run launchctl load to activate.
+- Joe needs to set up Termius on iPhone: host=100.83.77.44, user=agentserver
+
+**Memory/amnesia fix — still pending**
+- Item #3 on build queue
+- Jin loads 3 Google Drive docs at session start but can't write back yet (service account limitation)
+
+--- Memory update Feb 21, 11:08 PM ---
+**MEMORY EXTRACT — Session**
+
+**Termius/Remote Access:**
+- Termius (SSH iPhone app) + Tailscale confirmed as the plan for mobile remote access to Mac Mini
+- Blocker: Tailscale requires one-time GUI approval on Mac Mini (Network Extension) — needs a monitor to click through
+- Joe does NOT have a monitor currently
+- Plan: Get a monitor temporarily when possible (5 min job), then complete Tailscale setup
+- Until then: SSH only works from MacBook on home network; Slack/Jin functional regardless
+
+**Memory System:**
+- Drive write access still not wired up — this is blocking the living memory/Weekly Log build
+- Item #3 in build queue
+
+**Slack Profile:**
+- Joe wants Jin to look like a team member (not an app)
+- Discussed updating bot display name, avatar, description in Slack app settings
+- Not yet actioned
+
+**Google Drive Doc Access:**
+- Joe can share doc links mid-conversation and Jin can read them if content is injected
+- Confirmed working this session
+
+
+--- Feb 22, 11:05 AM ---
+Nothing worth saving. No decisions made, no strategic shifts, no new business context, no tasks completed. The Tailscale/monitor blocker was already known. No revenue or margin implications.
+
+
+--- Feb 22, 11:20 AM ---
+Scratch that — you already showed me the IP is `100.83.77.44`. Let me re-examine your screenshot... Termius is connecting *to* that IP but getting routed over IPv6 internally. That's a Termius behavior, not the IP itself.
+
+Force IPv4 in Termius host settings. That's the fix.
+
+
+--- Feb 22, 11:25 AM ---
+Nothing here clears the bar for long-term memory. This is a pending technical troubleshooting task (SSH/IPv6 config on the Mac Mini) with no decisions made, no strategic shift, no business context, and no revenue path. It's unresolved and routine.
+
+When the fix is complete and remote access is confirmed working, that's worth logging — because it unlocks Joe's ability to manage infrastructure remotely, which has operational value.
+
+**Come back and say "update memory" after the SSH issue is resolved.**
+
+
+--- Feb 22, 1:12 PM ---
+Nothing worth saving. No decisions made, no strategic shifts, no business context, no completed tasks. The IPv6/SSH fix is still unresolved and in progress.
+
+
+--- Feb 22, 2:07 PM ---
+**DOCS API FIX — DONE**
+appendToGoogleDoc() now uses Drive API (export + update) instead of Docs API.
+Memory writes fully operational. Jin restarted via PM2.
+
+**TERMIUS 5G TEST — CONFIRMED WORKING**
+Joe confirmed Termius SSH over 5G connects to Mac Mini successfully.
+Phase 2 remote access is 100% complete.
+Joe can now SSH into Mac Mini from anywhere on mobile data.
+
+**CLOUD SERVER RESEARCH — DONE, PAUSED**
+Recommendation: Railway ($5/mo, Worker service) — easiest deploy, no sleep risk for Socket Mode bot.
+Avoid Fly.io — documented issues killing non-HTTP processes despite auto_stop_machines = false.
+DigitalOcean $6/mo Droplet = most reliable if Railway causes issues.
+Will resume deployment after Termius 5G is confirmed.
+
+
+--- Feb 22, 1:40 PM ---
+Nothing worth saving. This was a technical troubleshooting session — no decisions made, no strategic shifts, no business context, no revenue path. The SSH/IPv6 issue remains unresolved but was already logged in the previous memory update.
