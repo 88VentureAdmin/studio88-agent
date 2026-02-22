@@ -1,8 +1,8 @@
-[phases.install]
-cmds = ["npm install"]
+[phases.setup]
+nixPkgs = ["nodejs_20"]
 
-[phases.build]
-cmds = []
+[phases.install]
+cmds = ["npm ci"]
 
 [start]
 cmd = "node agent.js"
