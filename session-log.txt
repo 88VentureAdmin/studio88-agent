@@ -309,3 +309,19 @@ Nothing worth saving to long-term memory. This is a live debugging session — n
 
 **Naming**
 - "Terminus" = Termius (Joe's shorthand, note for future reference)
+
+
+--- Feb 22, 3:21 PM ---
+Nothing worth saving to long-term memory. This conversation is entirely troubleshooting session — checking pm2 status, Tailscale connectivity, Slack as interface, and walking through GitHub token generation. No decisions finalized, no credentials exchanged, no tasks completed, no strategic shifts, no revenue-relevant context.
+
+
+--- Feb 22, 3:25 PM ---
+Got it. Let me push that change now.
+
+
+--- Feb 22, 3:27 PM ---
+Nothing worth saving. No decisions made, no strategy shifts, no business context, no completed work. This was a troubleshooting session (Railway deploy failure, credential leaks) — no resolution reached.
+
+
+--- Feb 22, 3:31 PM ---
+Nothing worth saving. This is a technical troubleshooting session (Railway deployment, env var typo fix) with no decisions, strategy, business context, or revenue-relevant outcomes recorded yet.
