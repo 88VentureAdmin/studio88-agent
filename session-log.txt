@@ -116,6 +116,7 @@ BUILD QUEUE — WHAT'S NEXT (updated Feb 21)
 --- PENDING (Feb 22, Session 5) ---
 - Google Docs API / Drive write — verify working, then backfill Live Log
 - Phase 3: Cloud server deploy (Railway recommended)
+- Phase 6 remaining: Playwright browser, node-cron scheduling, Calendar/Gmail
 
 --- PHASE 3: ALWAYS-ON CLOUD LAYER ---
 2. CLOUD SERVER — JIN LIVES IN THE CLOUD
@@ -140,17 +141,28 @@ BUILD QUEUE — WHAT'S NEXT (updated Feb 21)
 --- PHASE 5: FULL MEMORY SYSTEM (DONE — see above) ---
 
 --- PHASE 6: JIN WITH HANDS ---
-5. ORCHESTRATION — CLAUDE CODE + MCP
-   MCP servers: filesystem, terminal, browser, calendar, email.
-   Jin goes from "chat assistant" to "agent that executes."
 
-6. BROWSER / CHROME AUTOMATION
-   Playwright MCP or Chrome DevTools Protocol.
-   Use cases: research, ops tasks, form filling, web scraping.
+✅ COMPLETE (Feb 22, Session 5):
 
-7. SCHEDULING / PROACTIVE TASKS
-   Jin works without being asked: morning briefing, reminders, market checks.
-   Tool: node-cron.
+Option A — Tools wired into agent.js:
+  - run_shell: Jin runs any shell command on Mac Mini (PM2, logs, scripts, disk, etc.)
+  - read_file / write_file: Jin reads and writes files on the filesystem
+  - list_directory: Jin lists directory contents
+  - callClaude() upgraded to full agentic loop — tool calls, results, multi-step reasoning
+  - max_tokens increased to 4096
+
+Option B — Claude Code subprocess (!build):
+  - !build <task> in Slack spawns `claude --print <task>` on Mac Mini
+  - Claude Code has full capabilities: reads files, writes code, runs bash, multi-step
+  - Output streamed back to Slack when done (handles >2900 char responses)
+  - CLAUDECODE env var stripped to avoid nested session error
+
+Confirmed working: Joe tested in Slack, PM2 shows Jin online.
+
+REMAINING in Phase 6:
+- Browser / Playwright: Jin can browse the web, scrape, fill forms
+- Scheduling / proactive tasks: morning briefing, reminders, market checks (node-cron)
+- Calendar + Gmail integration
 
 --- FUTURE: TEAM AGENTS ---
 - Social media content creator for Jessica (marketing)
@@ -251,12 +263,49 @@ Joe confirmed Termius SSH over 5G connects to Mac Mini successfully.
 Phase 2 remote access is 100% complete.
 Joe can now SSH into Mac Mini from anywhere on mobile data.
 
-**CLOUD SERVER RESEARCH — DONE, PAUSED**
-Recommendation: Railway ($5/mo, Worker service) — easiest deploy, no sleep risk for Socket Mode bot.
-Avoid Fly.io — documented issues killing non-HTTP processes despite auto_stop_machines = false.
-DigitalOcean $6/mo Droplet = most reliable if Railway causes issues.
-Will resume deployment after Termius 5G is confirmed.
+**CLOUD SERVER — IN PROGRESS, BLOCKED ON RAILWAY BUILD**
+Platform: Railway (Hobby $5/mo, subscribed Feb 22)
+GitHub repo: https://github.com/88VentureAdmin/studio88-agent (private)
+Status: Repeatedly failing — "error creating build plan with railpack"
+Fixes attempted so far:
+  - Health check HTTP server added (for Railway PORT)
+  - package.json main fixed (index.js → agent.js)
+  - Procfile added (worker: node agent.js)
+  - nixpacks.toml added (explicit install + start)
+  - All 4 env vars in Railway: ANTHROPIC_API_KEY, SLACK_BOT_TOKEN, SLACK_APP_TOKEN, GOOGLE_SERVICE_ACCOUNT_JSON
+Next step: Need full build logs to diagnose. Moving session to MC + VS Code to get better visibility.
 
 
 --- Feb 22, 1:40 PM ---
 Nothing worth saving. This was a technical troubleshooting session — no decisions made, no strategic shifts, no business context, no revenue path. The SSH/IPv6 issue remains unresolved but was already logged in the previous memory update.
+
+
+--- Feb 22, 2:58 PM ---
+Nothing worth saving to long-term memory. This was a troubleshooting session (SSH access, Termius, PM2 status check) — no decisions made, no strategic shifts, no business context, no tasks completed beyond confirming the agent is running.
+
+
+--- Feb 22, 3:17 PM ---
+Nothing worth saving to long-term memory. This is a live debugging session — no decisions made, no strategic shifts, no tasks completed, no new business context. If Railway deployment succeeds, that's worth saving: "Jin (agent) deployed to Railway — always-on cloud layer active."
+
+
+--- Feb 22, 3:20 PM ---
+**MEMORY SAVE — Jin / 88 Venture Studio**
+
+**Infrastructure**
+- Mac Mini (hostname: Agents-Mac-mini.local, IP: 100.83.77.44, user: agentserver) is operational and running Jin via PM2
+- Slack is confirmed primary interface for Jin; Termius is secondary (admin/shell access only)
+- Termius on phone works on home network; IPv6 issue blocks access over 5G — not yet resolved
+
+**Active Task — Railway Deployment (Phase 3)**
+- Attempting to deploy studio88-agent to Railway for always-on cloud layer
+- Build failing: "Error creating build plan with Railpack" — nixpacks.toml fix did not resolve it
+- Next step: add Dockerfile to repo so Railway bypasses Railpack entirely
+- Status: **blocked, in progress**
+
+**Security Incident**
+- Joe posted GitHub credentials (joe@studio-88.com / SZ7lLr$k*d$) in plain text in Slack
+- Advised immediate password reset — confirm this was done
+- Do not store or use these credentials
+
+**Naming**
+- "Terminus" = Termius (Joe's shorthand, note for future reference)

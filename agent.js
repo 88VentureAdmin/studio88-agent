@@ -14,6 +14,7 @@ const fs = require('fs');
 const mammoth = require('mammoth');
 const https = require('https');
 const http = require('http');
+const { execSync, spawn } = require('child_process');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -329,6 +330,113 @@ async function buildUserContent(text, files, botToken) {
   return { content: contentBlocks, historyText };
 }
 
+// ─── Tools (Option A) ────────────────────────────────────────────────────────
+
+const TOOLS = [
+  {
+    name: 'run_shell',
+    description: 'Run a shell command on the Mac Mini. Use for checking PM2 status, reading logs, restarting processes, checking disk/memory, running scripts, etc.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'The shell command to run' },
+      },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'read_file',
+    description: 'Read a file from the Mac Mini filesystem.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute or relative path to the file' },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'write_file',
+    description: 'Write content to a file on the Mac Mini filesystem.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path to the file' },
+        content: { type: 'string', description: 'Content to write' },
+      },
+      required: ['path', 'content'],
+    },
+  },
+  {
+    name: 'list_directory',
+    description: 'List files and directories at a given path.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Directory path' },
+      },
+      required: ['path'],
+    },
+  },
+];
+
+async function executeTool(name, input) {
+  try {
+    switch (name) {
+      case 'run_shell': {
+        try {
+          const output = execSync(input.command, {
+            cwd: '/Users/agentserver/studio88-agent',
+            timeout: 30000,
+            encoding: 'utf8',
+          });
+          return output || '(no output)';
+        } catch (err) {
+          return `Exit ${err.status || 1}:\n${err.stdout || ''}${err.stderr || err.message}`;
+        }
+      }
+      case 'read_file':
+        return fs.readFileSync(input.path, 'utf8');
+      case 'write_file':
+        fs.writeFileSync(input.path, input.content, 'utf8');
+        return 'Written.';
+      case 'list_directory':
+        return fs.readdirSync(input.path).join('\n');
+      default:
+        return `Unknown tool: ${name}`;
+    }
+  } catch (err) {
+    return `Error: ${err.message}`;
+  }
+}
+
+// ─── Claude Code Subprocess (Option B) ───────────────────────────────────────
+
+function runClaudeCode(task, cwd) {
+  return new Promise((resolve, reject) => {
+    const env = { ...process.env };
+    delete env.CLAUDECODE; // avoid nested session check
+
+    const proc = spawn('claude', ['--print', task, '--output-format', 'text'], {
+      cwd,
+      env,
+    });
+
+    let output = '';
+    let error = '';
+    proc.stdout.on('data', (d) => { output += d; });
+    proc.stderr.on('data', (d) => { error += d; });
+    proc.on('close', (code) => {
+      if (code === 0) resolve(output.trim());
+      else reject(new Error(error.trim() || `Exit code ${code}`));
+    });
+    proc.on('error', reject);
+
+    // 5-minute timeout
+    setTimeout(() => { proc.kill(); reject(new Error('Timed out after 5 minutes')); }, 300000);
+  });
+}
+
 // ─── Claude ───────────────────────────────────────────────────────────────────
 
 const anthropic = new Anthropic();
@@ -376,19 +484,46 @@ ${driveContext}`;
 }
 
 async function callClaude(systemPrompt, history, userContent) {
-  // userContent is either a string or { content: [...blocks], historyText }
   const messageContent = typeof userContent === 'string' ? userContent : userContent.content;
-
   const messages = [...history, { role: 'user', content: messageContent }];
 
-  const response = await anthropic.messages.create({
+  let response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
+    max_tokens: 4096,
     system: systemPrompt,
     messages,
+    tools: TOOLS,
   });
 
-  return response.content[0].text;
+  // Agentic loop — keep going while Claude wants to use tools
+  while (response.stop_reason === 'tool_use') {
+    const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+    const toolResults = [];
+
+    for (const block of toolUseBlocks) {
+      console.log(`  → Tool: ${block.name}`, JSON.stringify(block.input).slice(0, 120));
+      const result = await executeTool(block.name, block.input);
+      console.log(`  ← ${String(result).slice(0, 120)}`);
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: String(result),
+      });
+    }
+
+    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'user', content: toolResults });
+
+    response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages,
+      tools: TOOLS,
+    });
+  }
+
+  return response.content.find((b) => b.type === 'text')?.text || '(no response)';
 }
 
 // ─── Conversation History ─────────────────────────────────────────────────────
@@ -627,6 +762,27 @@ ${liveLogContent.slice(-6000)}`,
       } catch (err) {
         console.error('Digest failed:', err.message);
         await client.chat.postMessage({ channel: message.channel, text: `Digest failed: ${err.message}` });
+      }
+      return;
+    }
+
+    // !build <task> — spawn Claude Code to execute a build task on the Mac Mini
+    if (message.text?.trim().startsWith('!build ')) {
+      const task = message.text.trim().slice(7).trim();
+      const ackMsg = await client.chat.postMessage({
+        channel: message.channel,
+        text: `Starting Claude Code: "${task.slice(0, 80)}${task.length > 80 ? '...' : ''}"`,
+      });
+      try {
+        const output = await runClaudeCode(task, '/Users/agentserver/studio88-agent');
+        const reply = output || '(done — no output)';
+        // Slack has a 3000 char limit on chat.update text
+        await client.chat.update({ channel: message.channel, ts: ackMsg.ts, text: reply.slice(0, 2900) });
+        if (reply.length > 2900) {
+          await client.chat.postMessage({ channel: message.channel, text: reply.slice(2900) });
+        }
+      } catch (err) {
+        await client.chat.update({ channel: message.channel, ts: ackMsg.ts, text: `Build failed: ${err.message}` });
       }
       return;
     }
