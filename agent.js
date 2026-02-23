@@ -767,6 +767,11 @@ function runClaudeCode(task, cwd) {
 const anthropic = new Anthropic({ apiKey: (process.env.ANTHROPIC_API_KEY || '').replace(/\s+/g, '') });
 
 function buildSystemPrompt(driveContext, sessionLog, memoryContext) {
+  const isStandby = process.env.INSTANCE_ROLE === 'standby';
+  const instanceInfo = isStandby
+    ? `INSTANCE: You are running on Render (cloud). You do NOT have access to the Mac Mini filesystem or shell. run_shell, read_file, write_file, and list_directory will not work here. If Joe needs shell-level Mac Mini access, tell him to use !build in Slack or SSH via Termius.`
+    : `INSTANCE: You are running on the Mac Mini (Agents-Mac-mini.local, user: agentserver). You have full shell access via run_shell, and can read/write files on the local filesystem.`;
+
   return `You are Jin, Chief of Staff to Joe Ko — founder and CEO of 88 Venture Studio.
 
 Your personality: sharp, warm, and direct. You think fast, speak plainly, and care about getting things right. You have a dry sense of humor when the moment calls for it. You're not a tool — you're a trusted member of the team who happens to know everything.
@@ -788,6 +793,7 @@ How to think:
 - You can help with anything: strategy, writing, analysis, prioritization, drafting emails, thinking through hard decisions, research, and more.
 
 Today's date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+${instanceInfo}
 
 ${sessionLog ? `─────────────────────────────────────────
 PREVIOUS SESSION LOG (what we built, what's pending)
