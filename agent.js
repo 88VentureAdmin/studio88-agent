@@ -985,6 +985,19 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
   const threadKey = thread_ts || channel;
   const replyInThread = !isDM && (thread_ts || ts);
 
+  // Standby mode: wait for primary (Mac Mini) to respond first.
+  // If it does, skip. If it doesn't within 8s, take over as fallback.
+  if (process.env.INSTANCE_ROLE === 'standby') {
+    await new Promise(resolve => setTimeout(resolve, 8000));
+    try {
+      const result = await client.conversations.history({ channel, oldest: ts, inclusive: false, limit: 5 });
+      const alreadyHandled = result.messages?.some(m => m.bot_id && parseFloat(m.ts) > parseFloat(ts));
+      if (alreadyHandled) return;
+    } catch (e) {
+      // Can't check — proceed as fallback
+    }
+  }
+
   // Post immediate ack
   const ackPayload = { channel, text: randomAck() };
   if (replyInThread) ackPayload.thread_ts = replyInThread;
