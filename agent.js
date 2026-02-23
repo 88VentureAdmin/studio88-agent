@@ -48,6 +48,10 @@ const AI_HUB_FOLDER_ID = '125EAuI55RG3Os59rUeuIAkbv47To4s70';
 const HISTORY_DRIVE_FILENAME = 'jin-conversation-history.json';
 let historyDriveFileId = null; // resolved at startup
 
+const HEARTBEAT_DRIVE_FILENAME = 'jin-heartbeat.json';
+const HEARTBEAT_STALENESS_MS = 6 * 60 * 1000; // 6 minutes — 2x the heartbeat interval
+let heartbeatFileId = null; // cached at first check
+
 const GMAIL_TOKENS_PATH = './gmail-tokens.json';
 
 function getOAuthClient() {
@@ -89,30 +93,36 @@ function parseEnvJson(val) {
 
 // ─── Google Drive ─────────────────────────────────────────────────────────────
 
-function getDriveClient() {
-  // Use service account if available (Mac Mini), otherwise fall back to OAuth (Render)
+const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/documents',
+];
+
+function getGoogleAuthClient() {
   if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
     const key = parseEnvJson(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ['https://www.googleapis.com/auth/drive'] });
-    return google.drive({ version: 'v3', auth });
+    return new google.auth.GoogleAuth({ credentials: key, scopes: GOOGLE_SCOPES });
   } else if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
     const key = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8'));
-    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ['https://www.googleapis.com/auth/drive'] });
-    return google.drive({ version: 'v3', auth });
+    return new google.auth.GoogleAuth({ credentials: key, scopes: GOOGLE_SCOPES });
   } else {
-    return getDriveClientOAuth();
+    return getOAuthClient();
   }
+}
+
+function getDriveClient() {
+  return google.drive({ version: 'v3', auth: getGoogleAuthClient() });
 }
 
 async function appendToGoogleDoc(docId, text) {
   try {
-    const drive = getDriveClient();
-    const res = await drive.files.export({ fileId: docId, mimeType: 'text/plain' });
-    const current = res.data || '';
-    const updated = current + text;
-    await drive.files.update({
-      fileId: docId,
-      media: { mimeType: 'text/plain', body: updated },
+    const auth = getGoogleAuthClient();
+    const docs = google.docs({ version: 'v1', auth });
+    await docs.documents.batchUpdate({
+      documentId: docId,
+      requestBody: {
+        requests: [{ insertText: { endOfSegmentLocation: { segmentId: '' }, text } }],
+      },
     });
   } catch (err) {
     console.warn(`  ✗ Failed to append to doc ${docId}: ${err.message}`);
@@ -762,6 +772,29 @@ function runClaudeCode(task, cwd) {
   });
 }
 
+// ─── Mac Mini heartbeat check (Render only) ───────────────────────────────────
+
+async function checkMacMiniAlive() {
+  try {
+    const drive = getDriveClientOAuth();
+    if (!heartbeatFileId) {
+      const res = await drive.files.list({
+        q: `name='${HEARTBEAT_DRIVE_FILENAME}' and '${AI_HUB_FOLDER_ID}' in parents and trashed=false`,
+        fields: 'files(id)',
+      });
+      if (res.data.files.length === 0) return false; // no heartbeat file = assume down
+      heartbeatFileId = res.data.files[0].id;
+    }
+    const res = await drive.files.get({ fileId: heartbeatFileId, alt: 'media' }, { responseType: 'text' });
+    const data = JSON.parse(res.data || '{}');
+    const lastBeat = new Date(data.lastHeartbeatAt).getTime();
+    return (Date.now() - lastBeat) < HEARTBEAT_STALENESS_MS;
+  } catch (err) {
+    console.warn('  ✗ Heartbeat check failed:', err.message);
+    return false; // can't check = assume down, let Render respond
+  }
+}
+
 // ─── Claude ───────────────────────────────────────────────────────────────────
 
 const anthropic = new Anthropic({ apiKey: (process.env.ANTHROPIC_API_KEY || '').replace(/\s+/g, '') });
@@ -991,17 +1024,12 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
   const threadKey = thread_ts || channel;
   const replyInThread = !isDM && (thread_ts || ts);
 
-  // Standby mode: wait for primary (Mac Mini) to respond first.
-  // If it does, skip. If it doesn't within 8s, take over as fallback.
+  // Standby mode: only respond if Mac Mini heartbeat is stale (Mac Mini is down).
   if (process.env.INSTANCE_ROLE === 'standby') {
-    await new Promise(resolve => setTimeout(resolve, 8000));
-    try {
-      const result = await client.conversations.history({ channel, oldest: ts, inclusive: false, limit: 5 });
-      const alreadyHandled = result.messages?.some(m => m.bot_id && parseFloat(m.ts) > parseFloat(ts));
-      if (alreadyHandled) return;
-    } catch (e) {
-      // Can't check — proceed as fallback
-    }
+    const macMiniAlive = await checkMacMiniAlive();
+    if (macMiniAlive) return; // Mac Mini is up — stay silent
+    // Mac Mini is down — fall through and respond as fallback
+    systemPrompt = systemPrompt + '\n\n⚠️ FALLBACK MODE: Mac Mini is currently offline. You are responding from Render (cloud). You have Gmail and Calendar access but no shell or filesystem access. Let Joe know you\'re in fallback mode and what you can and can\'t help with.';
   }
 
   // Post immediate ack
