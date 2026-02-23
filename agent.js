@@ -146,8 +146,8 @@ async function loadHistoryFromDrive() {
   if (!historyDriveFileId) return null;
   try {
     const drive = getDriveClientOAuth();
-    const res = await drive.files.export(
-      { fileId: historyDriveFileId, mimeType: 'text/plain' },
+    const res = await drive.files.get(
+      { fileId: historyDriveFileId, alt: 'media' },
       { responseType: 'text' }
     );
     const data = JSON.parse(res.data || '{}');
