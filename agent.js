@@ -764,7 +764,7 @@ function runClaudeCode(task, cwd) {
 
 // ─── Claude ───────────────────────────────────────────────────────────────────
 
-const anthropic = new Anthropic({ apiKey: (process.env.ANTHROPIC_API_KEY || '').trim() });
+const anthropic = new Anthropic({ apiKey: (process.env.ANTHROPIC_API_KEY || '').replace(/\s+/g, '') });
 
 function buildSystemPrompt(driveContext, sessionLog, memoryContext) {
   return `You are Jin, Chief of Staff to Joe Ko — founder and CEO of 88 Venture Studio.
