@@ -90,14 +90,18 @@ function parseEnvJson(val) {
 // ─── Google Drive ─────────────────────────────────────────────────────────────
 
 function getDriveClient() {
-  const key = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-    ? parseEnvJson(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
-    : JSON.parse(fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8'));
-  const auth = new google.auth.GoogleAuth({
-    credentials: key,
-    scopes: ['https://www.googleapis.com/auth/drive'],
-  });
-  return google.drive({ version: 'v3', auth });
+  // Use service account if available (Mac Mini), otherwise fall back to OAuth (Render)
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    const key = parseEnvJson(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ['https://www.googleapis.com/auth/drive'] });
+    return google.drive({ version: 'v3', auth });
+  } else if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
+    const key = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8'));
+    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ['https://www.googleapis.com/auth/drive'] });
+    return google.drive({ version: 'v3', auth });
+  } else {
+    return getDriveClientOAuth();
+  }
 }
 
 async function appendToGoogleDoc(docId, text) {
