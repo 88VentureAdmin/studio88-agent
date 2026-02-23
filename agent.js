@@ -44,6 +44,10 @@ const MEMORY_IDS = {
   quarterlyArchive: '1R5NZpRarA5zo02zIQfYGYbviTsxDtKQnp0NgogzSuJY',
 };
 
+const AI_HUB_FOLDER_ID = '125EAuI55RG3Os59rUeuIAkbv47To4s70';
+const HISTORY_DRIVE_FILENAME = 'jin-conversation-history.json';
+let historyDriveFileId = null; // resolved at startup
+
 // ─── Google Drive ─────────────────────────────────────────────────────────────
 
 function getDriveClient() {
@@ -69,6 +73,64 @@ async function appendToGoogleDoc(docId, text) {
     });
   } catch (err) {
     console.warn(`  ✗ Failed to append to doc ${docId}: ${err.message}`);
+  }
+}
+
+// ─── Drive Conversation History Sync ─────────────────────────────────────────
+
+async function resolveHistoryDriveFile() {
+  try {
+    const drive = getDriveClient();
+    const res = await drive.files.list({
+      q: `name='${HISTORY_DRIVE_FILENAME}' and '${AI_HUB_FOLDER_ID}' in parents and trashed=false`,
+      fields: 'files(id)',
+    });
+    if (res.data.files.length > 0) {
+      historyDriveFileId = res.data.files[0].id;
+      console.log(`  ✓ Found Drive history file: ${historyDriveFileId}`);
+    } else {
+      // Create it
+      const created = await drive.files.create({
+        requestBody: { name: HISTORY_DRIVE_FILENAME, parents: [AI_HUB_FOLDER_ID], mimeType: 'text/plain' },
+        media: { mimeType: 'text/plain', body: '{}' },
+        fields: 'id',
+      });
+      historyDriveFileId = created.data.id;
+      console.log(`  ✓ Created Drive history file: ${historyDriveFileId}`);
+    }
+  } catch (err) {
+    console.warn('  ✗ Could not resolve Drive history file:', err.message);
+  }
+}
+
+async function loadHistoryFromDrive() {
+  if (!historyDriveFileId) return null;
+  try {
+    const drive = getDriveClient();
+    const res = await drive.files.export(
+      { fileId: historyDriveFileId, mimeType: 'text/plain' },
+      { responseType: 'text' }
+    );
+    const data = JSON.parse(res.data || '{}');
+    console.log(`  ✓ Loaded conversation history from Drive (${Object.keys(data).length} thread(s))`);
+    return new Map(Object.entries(data));
+  } catch (err) {
+    console.warn('  ✗ Could not load Drive history:', err.message);
+    return null;
+  }
+}
+
+async function saveHistoryToDrive(map) {
+  if (!historyDriveFileId) return;
+  try {
+    const drive = getDriveClient();
+    const body = JSON.stringify(Object.fromEntries(map), null, 2);
+    await drive.files.update({
+      fileId: historyDriveFileId,
+      media: { mimeType: 'text/plain', body },
+    });
+  } catch (err) {
+    console.warn('  ✗ Could not save history to Drive:', err.message);
   }
 }
 
@@ -378,6 +440,37 @@ const TOOLS = [
       required: ['path'],
     },
   },
+  {
+    name: 'write_to_memory',
+    description: 'Save something important to Jin\'s long-term memory right now. Use this mid-conversation when a decision is made, a task is completed, or something strategic happens that should be remembered.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'What to save to memory' },
+      },
+      required: ['content'],
+    },
+  },
+  {
+    name: 'create_drive_file',
+    description: 'Create a new file in the Studio 88 AI Hub folder on Google Drive.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'File name (include extension, e.g. "Q1 Plan.txt")' },
+        content: { type: 'string', description: 'File content' },
+      },
+      required: ['name', 'content'],
+    },
+  },
+  {
+    name: 'list_drive_files',
+    description: 'List files in the Studio 88 AI Hub folder on Google Drive.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 async function executeTool(name, input) {
@@ -402,6 +495,38 @@ async function executeTool(name, input) {
         return 'Written.';
       case 'list_directory':
         return fs.readdirSync(input.path).join('\n');
+      case 'write_to_memory': {
+        const timestamp = new Date().toLocaleString('en-US', {
+          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+        });
+        const entry = `\n--- ${timestamp} (Jin saved) ---\n${input.content}\n`;
+        await appendToGoogleDoc(MEMORY_IDS.liveLog, entry);
+        try { fs.appendFileSync('./session-log.txt', entry, 'utf8'); } catch {}
+        return 'Saved to memory.';
+      }
+      case 'create_drive_file': {
+        const drive = getDriveClient();
+        const file = await drive.files.create({
+          requestBody: {
+            name: input.name,
+            parents: [AI_HUB_FOLDER_ID],
+            mimeType: 'text/plain',
+          },
+          media: { mimeType: 'text/plain', body: input.content },
+          fields: 'id,name,webViewLink',
+        });
+        return `Created: ${file.data.name}\nID: ${file.data.id}\nLink: ${file.data.webViewLink}`;
+      }
+      case 'list_drive_files': {
+        const drive = getDriveClient();
+        const res = await drive.files.list({
+          q: `'${AI_HUB_FOLDER_ID}' in parents and trashed=false`,
+          fields: 'files(id,name,mimeType,modifiedTime)',
+          orderBy: 'modifiedTime desc',
+        });
+        const files = res.data.files || [];
+        return files.map(f => `${f.name} (${f.id})`).join('\n') || '(empty)';
+      }
       default:
         return `Unknown tool: ${name}`;
     }
@@ -529,12 +654,14 @@ async function callClaude(systemPrompt, history, userContent) {
 // ─── Conversation History ─────────────────────────────────────────────────────
 
 const HISTORY_PATH = './conversation-history.json';
+let messagesSinceLastDriveSync = 0;
+const DRIVE_SYNC_EVERY = 5; // sync to Drive every N messages
 
 function loadHistoryFromDisk() {
   try {
     if (fs.existsSync(HISTORY_PATH)) {
       const data = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8'));
-      console.log(`  ✓ Loaded conversation history (${Object.keys(data).length} thread(s))`);
+      console.log(`  ✓ Loaded conversation history from disk (${Object.keys(data).length} thread(s))`);
       return new Map(Object.entries(data));
     }
   } catch (err) {
@@ -561,11 +688,17 @@ function getHistory(threadKey) {
 
 function appendHistory(threadKey, role, content) {
   const history = getHistory(threadKey);
-  // Store plain text in history (avoid storing large base64 blobs)
   const stored = typeof content === 'string' ? content : content.historyText || '[message]';
   history.push({ role, content: stored });
   if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
   saveHistoryToDisk(threadHistories);
+
+  // Async Drive sync every N messages (non-blocking)
+  messagesSinceLastDriveSync++;
+  if (messagesSinceLastDriveSync >= DRIVE_SYNC_EVERY) {
+    messagesSinceLastDriveSync = 0;
+    saveHistoryToDrive(threadHistories).catch(() => {});
+  }
 }
 
 // ─── Memory Consolidation ─────────────────────────────────────────────────────
@@ -676,6 +809,17 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Resolve Drive history file and load shared history (overrides local if available)
+  await resolveHistoryDriveFile();
+  const driveHistory = await loadHistoryFromDrive();
+  if (driveHistory) {
+    // Merge Drive history into local (Drive is authoritative)
+    for (const [key, val] of driveHistory.entries()) {
+      threadHistories.set(key, val);
+    }
+    saveHistoryToDisk(threadHistories);
+  }
+
   let driveContext = '';
   try {
     driveContext = await loadDriveContext();
