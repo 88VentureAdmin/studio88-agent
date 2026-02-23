@@ -49,7 +49,7 @@ const HISTORY_DRIVE_FILENAME = 'jin-conversation-history.json';
 let historyDriveFileId = null; // resolved at startup
 
 const HEARTBEAT_DRIVE_FILENAME = 'jin-heartbeat.json';
-const HEARTBEAT_STALENESS_MS = 6 * 60 * 1000; // 6 minutes — 2x the heartbeat interval
+const HEARTBEAT_STALENESS_MS = 30 * 60 * 1000; // 30 minutes — Render only activates after Mac Mini has been silent this long
 let heartbeatFileId = null; // cached at first check
 
 const GMAIL_TOKENS_PATH = './gmail-tokens.json';
