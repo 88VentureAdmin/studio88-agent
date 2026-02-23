@@ -60,13 +60,13 @@ function getOAuthClient() {
   try {
     if (fs.existsSync(GMAIL_TOKENS_PATH)) {
       tokens = JSON.parse(fs.readFileSync(GMAIL_TOKENS_PATH, 'utf8'));
-    } else if (process.env.GMAIL_TOKENS_JSON) {
-      tokens = parseEnvJson(process.env.GMAIL_TOKENS_JSON);
+    } else if (process.env.GMAIL_REFRESH_TOKEN) {
+      tokens = { refresh_token: process.env.GMAIL_REFRESH_TOKEN };
     } else {
       throw new Error('no tokens');
     }
   } catch (err) {
-    console.warn('  ✗ getOAuthClient failed:', err.message, '| GMAIL_TOKENS_JSON present:', !!process.env.GMAIL_TOKENS_JSON, '| first 30 chars:', process.env.GMAIL_TOKENS_JSON?.slice(0, 30));
+    console.warn('  ✗ getOAuthClient failed:', err.message);
     throw new Error('Gmail not authorized. Run setup-gmail.js first.');
   }
   oauth2Client.setCredentials(tokens);
