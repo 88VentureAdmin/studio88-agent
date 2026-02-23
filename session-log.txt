@@ -113,19 +113,47 @@ BUILD QUEUE — WHAT'S NEXT (updated Feb 21)
    - Termius config: host 100.83.77.44, port 22, username agentserver, NO password.
    - ✅ CONFIRMED Feb 22, Session 5 — Joe connected via Termius over 5G (cellular). Phase 2 DONE.
 
---- PENDING (Feb 22, Session 5) ---
-- Google Docs API / Drive write — verify working, then backfill Live Log
-- Phase 3: Cloud server deploy (Railway recommended)
-- Phase 6 remaining: Playwright browser, node-cron scheduling, Calendar/Gmail
+--- COMPLETED THIS SESSION (Feb 22, Session 5) ---
+✅ Phase 2: Tailscale SSH enabled, Termius over 5G confirmed working
+✅ Phase 3: Cloud Jin deployed to Render (Background Worker, $7/mo), confirmed live
+✅ Phase 6A: Tools — run_shell, read_file, write_file, list_directory, write_to_memory, create_drive_file, list_drive_files
+✅ Phase 6B: !build command — spawns Claude Code on Mac Mini from Slack
+✅ Shared conversation history — syncs to Drive every 5 messages (jin-conversation-history.json)
+✅ Both Mac Mini + Render confirmed green and in sync
+
+--- COMPLETED THIS SESSION (Feb 22, Session 6) ---
+✅ Gmail + Google Calendar (OAuth) — DONE
+   - APIs enabled in GCP (curious-mender-488106-u2)
+   - OAuth consent screen: External, app name Jin, test user added
+   - Desktop app OAuth credentials created
+   - Tokens stored in gmail-tokens.json (refresh token present — permanent auth)
+   - 4 tools wired into agent.js: read_gmail, send_email, get_calendar_events, create_calendar_event
+   - getOAuthClient() auto-refreshes tokens and saves back to gmail-tokens.json
+
+--- PENDING — NEXT SESSION ---
+1. Push code to GitHub + add Gmail env vars to Render (cloud instance needs GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and gmail-tokens.json content as GMAIL_TOKENS_JSON env var)
+2. Google Sheets tool
+3. Playwright browser automation (free, npm install playwright)
+4. Triple Whale API — check if Moby has programmatic API endpoint
+5. LingXing ERP API
+6. node-cron proactive tasks (morning briefing, reminders)
+7. Cancel Railway subscription (no longer needed)
 
 --- PHASE 3: ALWAYS-ON CLOUD LAYER ---
 2. CLOUD SERVER — JIN LIVES IN THE CLOUD
-   Deploy Jin brain to a cloud server (Fly.io, Railway, or $5 DigitalOcean droplet).
    Cloud = always-on Slack listener. Mac Mini = local worker for code/files/browser.
    When Mac Mini is up: cloud routes local tasks to it.
    When Mac Mini is down: cloud responds, flags limited capability.
    Prereq: Tailscale on Mac Mini — NOW DONE. Cloud can reach Mac Mini at 100.83.77.44.
    Result: Joe DMs Jin from anywhere, anytime. Always gets a response.
+
+   ✅ COMPLETE (Feb 22, Session 5):
+   - Railway ABANDONED — builder broken (us-west1 loop). Cancel Railway subscription.
+   - RENDER chosen — Background Worker, Dockerfile deploy, $7/mo
+   - GitHub repo: https://github.com/88VentureAdmin/studio88-agent (private)
+   - Dockerfile committed + pushed, Render build succeeded, service is LIVE
+   - Confirmed: stopped Mac Mini Jin via PM2, cloud Jin responded in Slack = Phase 3 DONE
+   - NOTE: Mac Mini Jin currently STOPPED. Restart: pm2 restart jin
 
 --- PHASE 4: GOOGLE DOC LINKS (DONE — see above) ---
 
@@ -162,7 +190,14 @@ Confirmed working: Joe tested in Slack, PM2 shows Jin online.
 REMAINING in Phase 6:
 - Browser / Playwright: Jin can browse the web, scrape, fill forms
 - Scheduling / proactive tasks: morning briefing, reminders, market checks (node-cron)
-- Calendar + Gmail integration
+- Calendar + Gmail integration (OAuth required)
+
+✅ SHARED MEMORY + DRIVE TOOLS (Feb 22, Session 5):
+- Conversation history syncs to Drive every 5 messages (jin-conversation-history.json in AI Hub)
+- On startup: Drive history loaded as authoritative source, merged with local
+- New tools: write_to_memory, create_drive_file, list_drive_files
+- Jin can now save to memory mid-conversation, create new Drive files, list Drive folder
+- Both Mac Mini and Render confirmed green and running same code
 
 --- FUTURE: TEAM AGENTS ---
 - Social media content creator for Jessica (marketing)
@@ -325,3 +360,57 @@ Nothing worth saving. No decisions made, no strategy shifts, no business context
 
 --- Feb 22, 3:31 PM ---
 Nothing worth saving. This is a technical troubleshooting session (Railway deployment, env var typo fix) with no decisions, strategy, business context, or revenue-relevant outcomes recorded yet.
+
+
+--- Feb 22, 3:37 PM ---
+Nothing worth saving. This is a technical debugging session — no decisions made, no strategy, no business context, no tasks with revenue implications. Pure dev ops troubleshooting (Railway deploy, Dockerfile, package.json). The Anthropic API key typo fix is operational, not strategic.
+
+
+--- Feb 22, 3:39 PM ---
+Nothing worth saving. This conversation is purely technical troubleshooting — Railway deployment errors, API key typo, build failures. No decisions, strategy, business context, or revenue-relevant information.
+
+
+--- Feb 22, 3:41 PM ---
+Nothing worth saving to long-term memory. This is a live technical troubleshooting session (Railway deploy failing due to Nixpacks error on studio88-agent), still in progress with no decisions made, no tasks completed, and no strategic context surfaced. Anthropic API key typo was noted as fixed — minor ops detail, not worth long-term storage.
+
+
+--- Feb 22, 3:43 PM ---
+Nothing worth saving. This is a technical debugging session — Railway deployment troubleshooting, build failures, env var typo fix in progress. No decisions made, no strategic shifts, no revenue-relevant context. Task (get Jin running on Railway) is still in progress, not completed.
+
+
+--- Feb 22, 4:12 PM ---
+Nothing worth saving to long-term memory. This conversation is entirely tactical debugging — Railway build failures, deployment troubleshooting, and a hosting platform comparison with no final decision made. No strategic shifts, no revenue paths confirmed, no tasks completed, no relationship changes.
+
+
+--- Feb 22, 4:33 PM ---
+Nothing worth saving to long-term memory.
+
+---
+
+**⚠️ Security Note for Joe:** This conversation contains live production credentials that were pasted in plaintext — Anthropic API key, Slack bot/app tokens, and a Google service account private key. These should be rotated immediately. Anyone with access to this conversation history has full access to those services.
+
+
+--- Feb 22, 8:11 PM ---
+**Memory-worthy items from this conversation:**
+
+1. **Infrastructure task in progress** — Deploying Jin (Slack agent) to Render cloud. 4 env vars being configured: `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_APP_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_JSON`. Deploy not yet confirmed complete.
+
+2. **Google Service Account active** — `jin-drive-access@curious-mender-488106-u2.iam.gserviceaccount.com` is the service account for Jin's Google Drive access. Project ID: `curious-mender-488106-u2`.
+
+3. **Dual-instance architecture** — Mac Mini Jin (local, `Agents-Mac-mini.local`) and cloud Jin (Render) running in parallel. Hostname check method established for distinguishing which instance is responding.
+
+4. **MCP evaluation completed** — Assessed 6 MCPs for 88 Venture Studio relevance. **Decision: prioritize Google Workspace MCP → Context7 → Supabase MCP** in that order. Rationale: Google Workspace extends existing Drive memory system to Docs/Sheets/Calendar/Gmail; Context7 improves build quality during active dev; Supabase replaces fragile JSON-based conversation history for shared state between Jin instances. Notion, Docker, Shadcn deprioritized — not relevant to current stack.
+
+5. **Open action item** — Google Workspace MCP setup not yet started. Joe expressed interest; Jin recommended it as next move.
+
+
+--- Feb 22, 9:21 PM ---
+**Memory items worth saving:**
+
+1. **MCP Priority Decision** — Team aligned on implementation order: Google Workspace MCP first (enables Drive/Docs/Calendar/Gmail for Jin's memory system), Context7 second (dev phase accuracy), Supabase third (replace fragile JSON-based conversation history with persistent queryable DB). Notion, Docker, Shadcn deprioritized.
+
+2. **Blocker — Google Docs API disabled** — Automatic memory writes to Drive failing silently. Service account project `curious-mender-488106-u2` needs Docs API enabled in Google Cloud Console. Unresolved. Blocks full memory loop.
+
+3. **Render Deploy** — Cloud Jin deployed to Render. Joe confirmed he believes it's working. Not formally verified via hostname test yet.
+
+4. **Memory Update Protocol confirmed** — Automatic: Jin writes to Live Log in Drive post-Slack conversation. Manual: update `session-log.txt` on Mac Mini → DM Jin `!reload` in Slack.

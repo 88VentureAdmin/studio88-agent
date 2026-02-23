@@ -48,6 +48,39 @@ const AI_HUB_FOLDER_ID = '125EAuI55RG3Os59rUeuIAkbv47To4s70';
 const HISTORY_DRIVE_FILENAME = 'jin-conversation-history.json';
 let historyDriveFileId = null; // resolved at startup
 
+const GMAIL_TOKENS_PATH = './gmail-tokens.json';
+
+function getOAuthClient() {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+    'http://localhost'
+  );
+  let tokens;
+  try {
+    if (fs.existsSync(GMAIL_TOKENS_PATH)) {
+      tokens = JSON.parse(fs.readFileSync(GMAIL_TOKENS_PATH, 'utf8'));
+    } else if (process.env.GMAIL_TOKENS_JSON) {
+      tokens = JSON.parse(process.env.GMAIL_TOKENS_JSON);
+    } else {
+      throw new Error('no tokens');
+    }
+  } catch {
+    throw new Error('Gmail not authorized. Run setup-gmail.js first.');
+  }
+  oauth2Client.setCredentials(tokens);
+  oauth2Client.on('tokens', (newTokens) => {
+    const updated = { ...tokens, ...newTokens };
+    fs.writeFileSync(GMAIL_TOKENS_PATH, JSON.stringify(updated, null, 2), 'utf8');
+    tokens = updated;
+  });
+  return oauth2Client;
+}
+
+function getDriveClientOAuth() {
+  return google.drive({ version: 'v3', auth: getOAuthClient() });
+}
+
 // ─── Google Drive ─────────────────────────────────────────────────────────────
 
 function getDriveClient() {
@@ -80,7 +113,7 @@ async function appendToGoogleDoc(docId, text) {
 
 async function resolveHistoryDriveFile() {
   try {
-    const drive = getDriveClient();
+    const drive = getDriveClientOAuth();
     const res = await drive.files.list({
       q: `name='${HISTORY_DRIVE_FILENAME}' and '${AI_HUB_FOLDER_ID}' in parents and trashed=false`,
       fields: 'files(id)',
@@ -106,7 +139,7 @@ async function resolveHistoryDriveFile() {
 async function loadHistoryFromDrive() {
   if (!historyDriveFileId) return null;
   try {
-    const drive = getDriveClient();
+    const drive = getDriveClientOAuth();
     const res = await drive.files.export(
       { fileId: historyDriveFileId, mimeType: 'text/plain' },
       { responseType: 'text' }
@@ -123,7 +156,7 @@ async function loadHistoryFromDrive() {
 async function saveHistoryToDrive(map) {
   if (!historyDriveFileId) return;
   try {
-    const drive = getDriveClient();
+    const drive = getDriveClientOAuth();
     const body = JSON.stringify(Object.fromEntries(map), null, 2);
     await drive.files.update({
       fileId: historyDriveFileId,
@@ -471,6 +504,57 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name: 'read_gmail',
+    description: 'Read emails from Gmail. Search by sender, subject, label, etc. Leave query blank for recent unread.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Gmail search query, e.g. "from:amazon.com is:unread" or "subject:invoice". Blank = recent unread.' },
+        maxResults: { type: 'number', description: 'Max emails to return (default 5, max 20)' },
+      },
+    },
+  },
+  {
+    name: 'send_email',
+    description: 'Send an email via Gmail on behalf of Joe.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address' },
+        subject: { type: 'string', description: 'Email subject' },
+        body: { type: 'string', description: 'Email body (plain text)' },
+        cc: { type: 'string', description: 'CC email address (optional)' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
+  {
+    name: 'get_calendar_events',
+    description: 'Get upcoming events from Google Calendar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days to look ahead (default 7)' },
+        maxResults: { type: 'number', description: 'Max events to return (default 10)' },
+      },
+    },
+  },
+  {
+    name: 'create_calendar_event',
+    description: 'Create a new event on Joe\'s Google Calendar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Event title' },
+        startDateTime: { type: 'string', description: 'Start in ISO 8601 format, e.g. 2026-02-23T10:00:00-08:00' },
+        endDateTime: { type: 'string', description: 'End in ISO 8601 format' },
+        description: { type: 'string', description: 'Event description (optional)' },
+        attendees: { type: 'string', description: 'Comma-separated attendee emails (optional)' },
+      },
+      required: ['title', 'startDateTime', 'endDateTime'],
+    },
+  },
 ];
 
 async function executeTool(name, input) {
@@ -526,6 +610,75 @@ async function executeTool(name, input) {
         });
         const files = res.data.files || [];
         return files.map(f => `${f.name} (${f.id})`).join('\n') || '(empty)';
+      }
+      case 'read_gmail': {
+        const auth = getOAuthClient();
+        const gmail = google.gmail({ version: 'v1', auth });
+        const q = input.query || 'is:unread';
+        const maxResults = Math.min(input.maxResults || 5, 20);
+        const listRes = await gmail.users.messages.list({ userId: 'me', q, maxResults });
+        const messages = listRes.data.messages || [];
+        if (messages.length === 0) return 'No messages found.';
+        const results = [];
+        for (const msg of messages) {
+          const full = await gmail.users.messages.get({
+            userId: 'me', id: msg.id, format: 'metadata',
+            metadataHeaders: ['From', 'To', 'Subject', 'Date'],
+          });
+          const headers = full.data.payload.headers;
+          const get = (name) => headers.find(h => h.name === name)?.value || '';
+          results.push(`From: ${get('From')}\nDate: ${get('Date')}\nSubject: ${get('Subject')}\nSnippet: ${full.data.snippet || ''}`);
+        }
+        return results.join('\n\n---\n\n');
+      }
+      case 'send_email': {
+        const auth = getOAuthClient();
+        const gmail = google.gmail({ version: 'v1', auth });
+        const lines = [
+          `To: ${input.to}`,
+          `Subject: ${input.subject}`,
+          ...(input.cc ? [`Cc: ${input.cc}`] : []),
+          'Content-Type: text/plain; charset=utf-8',
+          '',
+          input.body,
+        ];
+        const raw = Buffer.from(lines.join('\r\n')).toString('base64url');
+        await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+        return `Email sent to ${input.to}.`;
+      }
+      case 'get_calendar_events': {
+        const auth = getOAuthClient();
+        const calendar = google.calendar({ version: 'v3', auth });
+        const now = new Date();
+        const end = new Date();
+        end.setDate(end.getDate() + (input.days || 7));
+        const res = await calendar.events.list({
+          calendarId: 'primary',
+          timeMin: now.toISOString(),
+          timeMax: end.toISOString(),
+          maxResults: input.maxResults || 10,
+          singleEvents: true,
+          orderBy: 'startTime',
+        });
+        const events = res.data.items || [];
+        if (events.length === 0) return 'No upcoming events.';
+        return events.map(e => {
+          const start = e.start.dateTime || e.start.date;
+          return `${start} — ${e.summary || '(no title)'}${e.location ? `\n  Location: ${e.location}` : ''}${e.description ? `\n  ${e.description.slice(0, 100)}` : ''}`;
+        }).join('\n');
+      }
+      case 'create_calendar_event': {
+        const auth = getOAuthClient();
+        const calendar = google.calendar({ version: 'v3', auth });
+        const event = {
+          summary: input.title,
+          start: { dateTime: input.startDateTime },
+          end: { dateTime: input.endDateTime },
+        };
+        if (input.description) event.description = input.description;
+        if (input.attendees) event.attendees = input.attendees.split(',').map(e => ({ email: e.trim() }));
+        const res = await calendar.events.insert({ calendarId: 'primary', requestBody: event });
+        return `Event created: ${res.data.summary}\nLink: ${res.data.htmlLink}`;
       }
       default:
         return `Unknown tool: ${name}`;
