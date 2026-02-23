@@ -65,7 +65,8 @@ function getOAuthClient() {
     } else {
       throw new Error('no tokens');
     }
-  } catch {
+  } catch (err) {
+    console.warn('  ✗ getOAuthClient failed:', err.message, '| GMAIL_TOKENS_JSON present:', !!process.env.GMAIL_TOKENS_JSON, '| first 30 chars:', process.env.GMAIL_TOKENS_JSON?.slice(0, 30));
     throw new Error('Gmail not authorized. Run setup-gmail.js first.');
   }
   oauth2Client.setCredentials(tokens);
