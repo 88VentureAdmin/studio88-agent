@@ -190,10 +190,29 @@ async function saveHistoryToDrive(map) {
 function loadSessionLog() {
   const logPath = './session-log.txt';
   if (fs.existsSync(logPath)) {
-    console.log('  ✓ Loaded: session log');
-    return fs.readFileSync(logPath, 'utf8');
+    const content = fs.readFileSync(logPath, 'utf8');
+    // Only load the last 3000 chars — it's an ops log, not full history
+    const tail = content.slice(-3000);
+    console.log('  ✓ Loaded: session log (tail)');
+    return tail;
   }
   return null;
+}
+
+function loadMemoryFiles() {
+  const files = ['SOUL.md', 'JOE.md', 'MEMORY.md'];
+  const result = {};
+  for (const name of files) {
+    const p = `./memory/${name}`;
+    if (fs.existsSync(p)) {
+      result[name] = fs.readFileSync(p, 'utf8');
+      console.log(`  ✓ Loaded: memory/${name}`);
+    } else {
+      console.warn(`  ✗ Not found: memory/${name}`);
+      result[name] = '';
+    }
+  }
+  return result;
 }
 
 async function loadDriveContext() {
@@ -799,49 +818,47 @@ async function checkMacMiniAlive() {
 
 const anthropic = new Anthropic({ apiKey: (process.env.ANTHROPIC_API_KEY || '').replace(/\s+/g, '') });
 
-function buildSystemPrompt(driveContext, sessionLog, memoryContext) {
+function buildSystemPrompt(driveContext, sessionLog, memoryContext, memoryFiles = {}) {
   const isStandby = process.env.INSTANCE_ROLE === 'standby';
   const instanceInfo = isStandby
     ? `INSTANCE: You are running on Render (cloud). You do NOT have access to the Mac Mini filesystem or shell. run_shell, read_file, write_file, and list_directory will not work here. If Joe needs shell-level Mac Mini access, tell him to use !build in Slack or SSH via Termius.`
     : `INSTANCE: You are running on the Mac Mini (Agents-Mac-mini.local, user: agentserver). You have full shell access via run_shell, and can read/write files on the local filesystem.`;
 
-  return `You are Jin, Chief of Staff to Joe Ko — founder and CEO of 88 Venture Studio.
+  const soul = memoryFiles['SOUL.md'] || '';
+  const joe = memoryFiles['JOE.md'] || '';
+  const memory = memoryFiles['MEMORY.md'] || '';
 
-Your personality: sharp, warm, and direct. You think fast, speak plainly, and care about getting things right. You have a dry sense of humor when the moment calls for it. You're not a tool — you're a trusted member of the team who happens to know everything.
-
-How to communicate:
-- Write like a smart person texting, not like a consultant writing a report. Natural prose, not bullet lists, unless a list genuinely serves the content.
-- Don't use headers for simple responses. Save structure for when it actually helps (long breakdowns, comparisons, step-by-step instructions).
-- Be concise. Joe is busy. Lead with the answer, then explain if he needs more.
-- Warm but direct — no corporate fluff, no unnecessary hedging.
-- When you need clarification, ask one question. Not three.
-- When an image or screenshot is shared, describe what you see and respond to what's relevant — don't over-narrate it.
-- When a URL is shared, use the page content to inform your response naturally.
-
-How to think:
-- Design thinker first: user-centered, assumption-testing, first-principles.
-- Know the difference between triage mode (J.Adams inventory/legal), pivot mode (J.Adams brand), and build mode (CCS template, AI infrastructure).
-- Protect fragile relationships — Boley and Pediped are cash flow lifelines. Flag risks before acting.
-- When Joe brings a problem, help him find the real assumption being tested, not just the surface question.
-- You can help with anything: strategy, writing, analysis, prioritization, drafting emails, thinking through hard decisions, research, and more.
+  return `${soul}
 
 Today's date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
 ${instanceInfo}
 
-${sessionLog ? `─────────────────────────────────────────
-PREVIOUS SESSION LOG (what we built, what's pending)
+─────────────────────────────────────────
+WHO JOE IS
 ─────────────────────────────────────────
 
-${sessionLog}
+${joe}
+
+${memory ? `─────────────────────────────────────────
+DECISIONS & LESSONS (memory/MEMORY.md)
+─────────────────────────────────────────
+
+${memory}
 
 ` : ''}${memoryContext ? `─────────────────────────────────────────
-LONG-TERM MEMORY (Jin's memory system)
+RECENT ACTIVITY (Drive Live Log)
 ─────────────────────────────────────────
 
 ${memoryContext}
 
+` : ''}${sessionLog ? `─────────────────────────────────────────
+SESSION LOG (recent ops tail)
+─────────────────────────────────────────
+
+${sessionLog}
+
 ` : ''}─────────────────────────────────────────
-BUSINESS CONTEXT (loaded from Google Drive)
+BUSINESS CONTEXT (Google Drive)
 ─────────────────────────────────────────
 
 ${driveContext}`;
@@ -1076,6 +1093,7 @@ async function main() {
   }
 
   const sessionLog = loadSessionLog();
+  const memoryFiles = loadMemoryFiles();
   let memoryContext = '';
   try {
     memoryContext = await loadMemoryContext();
@@ -1083,9 +1101,10 @@ async function main() {
     console.warn('Could not load memory context:', err.message);
   }
   const context = {
-    systemPrompt: buildSystemPrompt(driveContext, sessionLog, memoryContext),
+    systemPrompt: buildSystemPrompt(driveContext, sessionLog, memoryContext, memoryFiles),
     driveContext,
     memoryContext,
+    memoryFiles,
   };
   const botToken = process.env.SLACK_BOT_TOKEN;
 
@@ -1102,10 +1121,12 @@ async function main() {
     if (!allowedSubtypes.includes(message.subtype)) return;
     if (!message.text && !message.files) return;
 
-    // !reload — re-read session log and rebuild system prompt without restarting
+    // !reload — re-read session log, memory files, and rebuild system prompt without restarting
     if (message.text?.trim() === '!reload') {
       const freshLog = loadSessionLog();
-      context.systemPrompt = buildSystemPrompt(context.driveContext, freshLog, context.memoryContext);
+      const freshMemoryFiles = loadMemoryFiles();
+      context.memoryFiles = freshMemoryFiles;
+      context.systemPrompt = buildSystemPrompt(context.driveContext, freshLog, context.memoryContext, freshMemoryFiles);
       await client.chat.postMessage({ channel: message.channel, text: 'Reloaded. I\'m current.' });
       return;
     }
@@ -1147,7 +1168,7 @@ ${liveLogContent.slice(-6000)}`,
 
         // Reload memory context so next messages use the new digest
         context.memoryContext = await loadMemoryContext();
-        context.systemPrompt = buildSystemPrompt(context.driveContext, loadSessionLog(), context.memoryContext);
+        context.systemPrompt = buildSystemPrompt(context.driveContext, loadSessionLog(), context.memoryContext, context.memoryFiles);
 
         await client.chat.postMessage({ channel: message.channel, text: `Done. Weekly digest written to Drive for ${week}.` });
       } catch (err) {
