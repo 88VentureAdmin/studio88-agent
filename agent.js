@@ -61,7 +61,7 @@ function getOAuthClient() {
     if (fs.existsSync(GMAIL_TOKENS_PATH)) {
       tokens = JSON.parse(fs.readFileSync(GMAIL_TOKENS_PATH, 'utf8'));
     } else if (process.env.GMAIL_TOKENS_JSON) {
-      tokens = JSON.parse(process.env.GMAIL_TOKENS_JSON);
+      tokens = parseEnvJson(process.env.GMAIL_TOKENS_JSON);
     } else {
       throw new Error('no tokens');
     }
@@ -81,11 +81,16 @@ function getDriveClientOAuth() {
   return google.drive({ version: 'v3', auth: getOAuthClient() });
 }
 
+// Strip leading language hints (e.g. "json\n") that Render sometimes prepends to env var values
+function parseEnvJson(val) {
+  return JSON.parse(val.replace(/^[a-zA-Z]+\s*\n/, '').trim());
+}
+
 // ─── Google Drive ─────────────────────────────────────────────────────────────
 
 function getDriveClient() {
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-    ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
+    ? parseEnvJson(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
     : JSON.parse(fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8'));
   const auth = new google.auth.GoogleAuth({
     credentials: key,
