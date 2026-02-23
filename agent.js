@@ -565,6 +565,18 @@ const TOOLS = [
       required: ['title', 'startDateTime', 'endDateTime'],
     },
   },
+  {
+    name: 'read_sheet',
+    description: 'Read data from a Google Sheet. Pass a Sheets URL or file ID. Returns the sheet content as a table.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url_or_id: { type: 'string', description: 'Google Sheets URL or file ID' },
+        sheet_name: { type: 'string', description: 'Specific sheet/tab name to read (optional, reads first sheet by default)' },
+      },
+      required: ['url_or_id'],
+    },
+  },
 ];
 
 async function executeTool(name, input) {
@@ -689,6 +701,31 @@ async function executeTool(name, input) {
         if (input.attendees) event.attendees = input.attendees.split(',').map(e => ({ email: e.trim() }));
         const res = await calendar.events.insert({ calendarId: 'primary', requestBody: event });
         return `Event created: ${res.data.summary}\nLink: ${res.data.htmlLink}`;
+      }
+      case 'read_sheet': {
+        const auth = getOAuthClient();
+        // Extract file ID from URL if needed
+        const idMatch = input.url_or_id.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) ||
+                        input.url_or_id.match(/^([a-zA-Z0-9_-]{25,})$/);
+        const fileId = idMatch ? idMatch[1] : input.url_or_id;
+        const sheets = google.sheets({ version: 'v4', auth });
+        // Get sheet metadata to find the right tab
+        const meta = await sheets.spreadsheets.get({ spreadsheetId: fileId });
+        const sheetList = meta.data.sheets.map(s => s.properties.title);
+        const targetSheet = input.sheet_name
+          ? sheetList.find(s => s.toLowerCase() === input.sheet_name.toLowerCase()) || sheetList[0]
+          : sheetList[0];
+        const res = await sheets.spreadsheets.values.get({
+          spreadsheetId: fileId,
+          range: targetSheet,
+        });
+        const rows = res.data.values || [];
+        if (rows.length === 0) return 'Sheet is empty.';
+        const header = rows[0];
+        const data = rows.slice(1).map(row =>
+          header.map((h, i) => `${h}: ${row[i] || ''}`).join(' | ')
+        );
+        return `Sheet: ${targetSheet} (${rows.length - 1} rows)\n\n${data.slice(0, 50).join('\n')}${data.length > 50 ? `\n\n...${data.length - 50} more rows` : ''}`;
       }
       default:
         return `Unknown tool: ${name}`;
