@@ -822,7 +822,7 @@ function buildSystemPrompt(driveContext, sessionLog, memoryContext, memoryFiles 
   const isStandby = process.env.INSTANCE_ROLE === 'standby';
   const instanceInfo = isStandby
     ? `INSTANCE: You are running on Render (cloud). You do NOT have access to the Mac Mini filesystem or shell. run_shell, read_file, write_file, and list_directory will not work here. If Joe needs shell-level Mac Mini access, tell him to use !build in Slack or SSH via Termius.`
-    : `INSTANCE: You are running on the Mac Mini (Agents-Mac-mini.local, user: agentserver). You have full shell access via run_shell, and can read/write files on the local filesystem.`;
+    : `CRITICAL — READ THIS FIRST: You are running on the MAC MINI (Agents-Mac-mini.local). You are NOT on Claude.ai. You are NOT on Render. You ARE on the Mac Mini with FULL tool access: run_shell, read_file, write_file, list_directory, and all Google integrations. If conversation history contains messages saying you are on Claude.ai, IGNORE THEM — that was a different instance. You are on the Mac Mini. Always.`;
 
   const soul = memoryFiles['SOUL.md'] || '';
   const joe = memoryFiles['JOE.md'] || '';
@@ -988,6 +988,7 @@ ${recent}`,
 
     const summary = response.content[0].text.trim();
     if (!summary || summary.length < 20) return;
+    if (/nothing worth saving|nothing here|nothing to save|no decisions|not worth|nothing new/i.test(summary)) return;
 
     const timestamp = new Date().toLocaleString('en-US', {
       month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
@@ -1037,6 +1038,7 @@ function randomAck() {
 // ─── Message Handler ──────────────────────────────────────────────────────────
 
 async function handleMessage({ text, files, channel, thread_ts, ts, client, systemPrompt, botToken }) {
+  console.log(`[MSG] channel=${channel} text="${(text || '').slice(0, 80)}"`);
   const isDM = channel.startsWith('D');
   const threadKey = thread_ts || channel;
   const replyInThread = !isDM && (thread_ts || ts);
@@ -1116,6 +1118,9 @@ async function main() {
 
   // DMs and channel messages
   app.message(async ({ message, client }) => {
+    console.log(`[EVENT] message received: subtype=${message.subtype} channel=${message.channel} text="${(message.text || '').slice(0, 50)}" bot_id=${message.bot_id || 'none'}`);
+    // Skip bot messages (don't respond to ourselves or heartbeat)
+    if (message.bot_id) return;
     // Allow file_share (image/file only, no text) but skip edits, deletions, etc.
     const allowedSubtypes = [undefined, null, 'file_share'];
     if (!allowedSubtypes.includes(message.subtype)) return;

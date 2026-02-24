@@ -3,9 +3,32 @@
 ## Infrastructure Decisions
 
 - Mac Mini (hostname: Agents-Mac-mini.local, IP: 100.83.77.44, user: agentserver) is the primary Jin instance. PM2-managed: jin (agent.js), heartbeat (heartbeat.js), tailscale.
-- Render is standby ($7/mo). Same code, INSTANCE_ROLE=standby. Waits 30min heartbeat staleness before responding to prevent duplicates.
-- Railway was abandoned — builder broken, us-west1 loop. Still has $5/mo subscription that needs to be cancelled.
-- Render "suspend" does NOT immediately kill WebSocket — must delete service or rotate App Token to fully disconnect.
+- Render is standby ($7/mo) — TO BE REPLACED by Hetzner. Same code, INSTANCE_ROLE=standby.
+- Hetzner CPX31 (~$11/mo, 4 vCPU, 8GB RAM, Ubuntu) — Joe's explicit decision to move cloud to Hetzner.
+  - Advantage over Render: full Linux, persistent filesystem, can run Playwright, no container limits, no sleep
+  - Steps to deploy: provision → apt install nodejs/npm/git → npm install -g pm2 → clone repo → copy .env → pm2 start
+  - Gmail tokens: copy gmail-tokens.json OR set GMAIL_REFRESH_TOKEN env var
+  - Once confirmed: delete Render service, cancel Railway ($5/mo)
+- Railway was abandoned — builder broken. Subscription still active, needs cancellation.
+- Render "suspend" does NOT immediately kill WebSocket — must delete service or rotate App Token.
+
+## Billing — Anthropic API vs Max Subscription (Feb 23)
+
+- Jin's Slack bot (agent.js) ALWAYS uses API credits — unavoidable. API key stays in .env.
+- Claude Code sessions (VS Code) route through Joe's $200/mo Max plan — free, no API credits.
+- To keep Claude Code off API credits: ANTHROPIC_API_KEY must NOT be set in shell environment (not in ~/.zshrc).
+- Joe paused/intends to pause the API key to test if Claude Code routes through Max subscription.
+- If the key is paused: Jin Slack bot will stop working. The key in .env must stay active for agent.js.
+- Two separate things: shell env (controls Claude Code billing) vs .env file (controls agent.js).
+
+## Memory Architecture — Upgraded Feb 23 2026
+
+- memory/SOUL.md — Jin's static identity and personality
+- memory/JOE.md — Joe's profile, preferences, working style
+- memory/MEMORY.md — this file. Decisions and lessons learned.
+- session-log.txt — ops/build log, loaded as 3000-char tail only
+- All 4 files load at startup. !reload refreshes all of them live.
+- Proactive heartbeat (30 min, 6am-10pm PST): Gmail + Calendar → Claude → DM Joe only if action needed. HEARTBEAT_OK = silence.
 
 ## API Key Protocol
 

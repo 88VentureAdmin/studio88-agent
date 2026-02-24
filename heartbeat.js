@@ -204,6 +204,7 @@ async function runHeartbeat() {
     console.log('  No new activity. Nothing to consolidate.');
     state.lastHeartbeatAt = now.toISOString();
     saveState(state);
+    await writeHeartbeatToDrive(now.toISOString());
     return;
   }
 
@@ -327,6 +328,26 @@ async function proactiveCheck() {
     return;
   }
 
+  // If Joe hasn't responded since our last proactive message, don't send another
+  const state = loadState();
+  if (state.lastProactiveAt) {
+    try {
+      const history = await slack.conversations.history({
+        channel: JOE_DM_CHANNEL,
+        oldest: String(state.lastProactiveAt / 1000), // Slack uses seconds
+        limit: 10,
+      });
+      const joeReplied = (history.messages || []).some(m => !m.bot_id && !m.app_id);
+      if (!joeReplied) {
+        console.log('[Proactive] Joe hasn\'t responded to last update — staying quiet.');
+        return;
+      }
+    } catch (err) {
+      console.warn('[Proactive] Could not check DM history:', err.message);
+      // If we can't check, proceed anyway
+    }
+  }
+
   console.log('[Proactive] Running check...');
 
   const [emails, calendar] = await Promise.all([fetchRecentEmails(), fetchUpcomingCalendar()]);
@@ -379,6 +400,8 @@ If NO: reply with exactly the word: HEARTBEAT_OK`;
       channel: JOE_DM_CHANNEL,
       text: result,
     });
+    state.lastProactiveAt = Date.now();
+    saveState(state);
     console.log('[Proactive] Notified Joe.');
   } catch (err) {
     console.warn('[Proactive] Check failed:', err.message);
