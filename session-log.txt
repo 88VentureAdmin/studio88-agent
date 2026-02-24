@@ -1,5 +1,5 @@
 JIN SESSION LOG
-Last updated: February 23, 2026 — Session 8
+Last updated: February 24, 2026 — Session 9
 =====================================================
 
 WHO JIN IS
@@ -30,23 +30,27 @@ Service account: jin-drive-access@curious-mender-488106-u2.iam.gserviceaccount.c
   - Status: delegation submitted, awaiting Google propagation (can take up to 24h)
 
 =============================================================
-WHAT'S BUILT — COMPLETE (as of Feb 23, Session 8)
+WHAT'S BUILT — COMPLETE (as of Feb 24, Session 9)
 =============================================================
 
 CORE:
-  ✅ Slack bot (Socket Mode, DMs + channels + app_mentions)
+  ✅ Slack bot (HTTP mode via Tailscale Funnel, DMs + channels + app_mentions)
+  ✅ ExpressReceiver for HTTP mode (replaced default HTTPReceiver for middleware support)
   ✅ Google Drive context loaded at startup (Master Context + Convo Log + memory files)
   ✅ Image/screenshot support (Slack file download via bot token)
   ✅ URL auto-fetching (including authenticated Google Drive links)
   ✅ Long message handling (extractTextFromBlocks for Slack rich_text blocks)
   ✅ Conversation history persistence (disk + Drive sync)
   ✅ Streaming responses (chat.update with throttled deltas, ▍ cursor)
+  ✅ Natural ack flow: instant "ok" → 30s "one sec..." → streaming response
   ✅ Message interruption (AbortController, new message cancels in-flight request)
   ✅ Slack history backfill (last 72h on startup, fills gaps from restarts)
   ✅ Graceful shutdown handler (SIGTERM/SIGINT → app.stop() with 8s timeout guard)
-  ✅ Socket Mode tuned (clientPingTimeoutMS=15s, serverPingTimeoutMS=60s)
+  ✅ Socket Mode fallback (clientPingTimeoutMS=15s, serverPingTimeoutMS=60s, watchdog)
   ✅ PM2 ecosystem config (kill_timeout=10s, restart_delay=3s, max_memory_restart=512M)
-  ✅ Connection health: num_connections logged on hello, event delivery watchdog (30min)
+  ✅ Event deduplication for HTTP mode retries (client_msg_id or ts, 5min TTL)
+  ✅ Anthropic retry logic (3 retries, exponential backoff, friendly error messages)
+  ✅ Brave Search API live (web_search tool working, free tier 2K queries/month)
   ✅ Inline Slack uploads for generated images and screenshots
 
 MEMORY SYSTEM:
@@ -97,12 +101,13 @@ INFRASTRUCTURE:
     - PM2: jin (agent.js), heartbeat (heartbeat.js), tailscale
     - Tailscale SSH: 100.83.77.44 (confirmed working over 5G via Termius)
     - Tailscale Funnel: https://agents-mac-mini.tail8173ed.ts.net → localhost:3000
-    - HTTP mode (no Socket Mode) — Slack sends events via HTTP POST with retries
+    - HTTP mode (ExpressReceiver) — Slack sends events via HTTP POST with retries
+    - Socket Mode OFF in Slack dashboard, SLACK_APP_TOKEN still in .env as fallback
+    - ⚠ Funnel exposes port to public internet — scanners hit it constantly (harmless, all rejected)
   Hetzner CPX31 (standby) — jin-cloud, 5.78.150.102
     - INSTANCE_ROLE=standby, code at /opt/studio88-agent/
     - PM2: jin + heartbeat running
-    - ⚠ Needs code sync: still running Socket Mode (which is now OFF in Slack dashboard)
-    - TODO: deploy latest code + SLACK_SIGNING_SECRET for HTTP mode standby
+    - ⚠ Needs code sync: Session 9 changes (ExpressReceiver, ack flow, Brave fix) not deployed yet
   Render — CANCELLED (replaced by Hetzner)
   Railway — CANCELLED ($60/yr saved)
   GitHub: https://github.com/88VentureAdmin/studio88-agent (private)
@@ -133,19 +138,25 @@ WHAT JOE NEEDS TO DO
 BUILD QUEUE — NEXT
 =============================================================
 
-Priority improvements (researched + ranked):
+Completed (Sessions 8-9):
 1. ✅ Socket Mode reliability — ecosystem.config.js, watchdog, num_connections monitoring
-2. ⏳ HTTP mode migration — Tailscale Funnel, eliminate Socket Mode stale connections permanently
-   (CRITICAL: team will depend on Jin — communication must be flawless)
+2. ✅ HTTP mode migration — Tailscale Funnel + ExpressReceiver, event dedup, fully working
 3. ✅ Observational memory — real-time fact extraction via Haiku after every exchange
 4. ✅ Event-driven triggers — morning briefing (8:30am), EOD wrap-up (6pm), weekly preview (Sun 9pm) PST
-5. QuickBooks Online API — financial visibility across all brands
-6. Sync Hetzner standby — deploy latest code + HTTP mode + SLACK_SIGNING_SECRET
-7. Jin's own Drive — migrate memory files to jin@studio-88.com's Drive
-8. Triple Whale API — revenue/ad spend visibility
-9. LingXing ERP API — inventory/sourcing visibility
-10. Canva API — design automation from templates
-11. Adobe Firefly API — on-brand image generation
+5. ✅ Brave Search API — web_search tool live (key: BSAvb..., free tier)
+6. ✅ Ack UX improved — instant "ok" → 30s "one sec..." → streaming response
+7. ✅ Anthropic retry + friendly errors — 3 retries, exponential backoff, no raw JSON shown
+
+Next (in priority order):
+1. Sync Hetzner standby — deploy Session 9 code (ExpressReceiver, ack flow, Brave fix)
+2. QuickBooks Online API — financial visibility across all brands
+   (RESEARCHED: intuit-oauth + direct HTTP, Builder tier free 500K reads/mo, one app + 4 realmIDs)
+   (BLOCKED: Joe needs to create Intuit Developer app → paste Client ID + Secret)
+3. Jin's own Drive — migrate memory files to jin@studio-88.com's Drive (once delegation propagates)
+4. Triple Whale API — revenue/ad spend visibility
+5. LingXing ERP API — inventory/sourcing visibility
+6. Canva API — design automation from templates
+7. Adobe Firefly API — on-brand image generation
 
 =============================================================
 FUTURE ARCHITECTURE — MULTI-AGENT (noted, not building yet)
@@ -248,3 +259,116 @@ Who are Tracy, Emma, Joy, Celeste, Kitty, Apple, Kathrine, and Steven?
 **Joy Zhou** — Head of Marketplace (Amazon, Walmart, Temu). 15+ years Amazon. Strong logic, proactive, disciplined. Limited English speaking but reads well. Primary account: Sunbay Foods. Manages account managers. Productivity not yet clearly demonstrated. China, Tue–Sun, 3PM PST + 8hrs.
 
 **Celeste** — Amazon account manager for J.Adams. Reports to Joy. Apparel experience. China,
+
+
+--- Feb 23, 11:44 PM ---
+Nothing in this conversation is worth saving to long-term memory.
+
+The content is all team roster/org context — already extracted and saved in prior turns. This exchange is confirmation of existing records (the two Jessicas and Anne), not new decisions, strategic shifts, or revenue-relevant developments.
+
+No action required.
+
+
+--- Feb 23, 11:55 PM ---
+**Saved to long-term memory:**
+
+**Team Roster — 88 Venture Studio (23 people confirmed)**
+
+| # | Name | Role | Location | Hours |
+|---|------|------|----------|-------|
+| 1 | Joe Ko | Founder/CEO | US | — |
+| 2 | Jessica Ko | Partner/Social/TikTok/HR proxy | US | 9-5 PST |
+| 3 | Jessica Vuong | Marketing PM | US | 9-5 PST |
+| 4 | Richelle | CRO | US | Part-time |
+| 5 | Sultan | Google Ads | — | — |
+| 6 | Abdullah | SEO | — | — |
+| 7 | Anne (Princess) | Customer Service/Social retention | Philippines | 9-5 PST |
+| 8 | Kathrine Gilmer | Creative Director/Ecom Ops | US | Part-time Mon/Tue/Thu |
+| 9 | Steven Gee | Video/Photo/Content | US | — |
+| 10 | Jeffrey Gilmer | Contractor Photographer | US | — |
+| 11 | Tracy Wang | Head of Logistics/Supply Chain | US | — |
+| 12 | Emma Chang | Forecasting | Taiwan | — |
+| 13 | Cindy | Warehouse Manager | US | — |
+| 14 | Jose | Warehouse | US | — |
+| 15 | Joy Zhou | Head of Marketplace | China | 3PM-11PM PST Tue-Sun |
+| 16 | Celeste | Amazon AM — J.Adams | China | Same as Joy |
+
+
+--- Feb 24, 12:21 AM ---
+Nothing in this conversation is worth saving to long-term memory.
+
+The tariff question was exploratory and Joe didn't confirm any decision, business context, or next step. The technical troubleshooting (Railway deployment, Dockerfile, API key typo) was in-session work — no task was completed, no decision was finalized, and the deployment never succeeded within this conversation.
+
+If the Railway deployment resolves or Joe decides to pursue the HTS/exclusion review for J.Adams, those are worth saving at that point.
+
+
+=============================================================
+SESSION 9 — Feb 24, 2026
+=============================================================
+
+WHAT WE DID:
+1. Ack UX redesign — replaced random phrases ("let me think on that...") with natural flow:
+   - Instant: "ok" (simple receipt)
+   - 30 seconds: "one sec..." / "still on it..." / "working on it..." (progress timer)
+   - Then streaming response takes over naturally
+   Code: ACK_PHRASES replaced with WAIT_PHRASES, 30s setTimeout with streamingStarted flag
+
+2. Brave Search API key added — BSAvbxSjFuMN986uL_cFJq4PaXsHD9X
+   - web_search tool now fully functional
+   - Fixed gzip bug: was sending Accept-Encoding:gzip without decompressing → JSON parse failure
+   - Removed gzip header, added better error messages on parse failure
+
+3. HTTP mode event delivery fix — Slack stopped delivering events after URL reset
+   - Root cause: Slack suspended delivery after repeated signature verification failures
+     (those failures were from internet scanner GET requests hitting /slack/events before
+     we switched to ExpressReceiver — the old HTTPReceiver tried to verify ALL requests)
+   - Fix: Joe removed Event Subscriptions URL → saved → re-entered URL → re-verified → saved
+   - This reset Slack's delivery state and events started flowing again
+   - IMPORTANT: If events stop again, do the URL remove/re-add/save cycle
+
+4. Switched to ExpressReceiver — replaced default Bolt HTTPReceiver
+   - Added router middleware for Slack-only request logging (filters out scanner noise)
+   - processBeforeResponse: true for proper event handling
+   - Import: added ExpressReceiver to @slack/bolt require
+
+5. QBO research completed — full integration guide produced:
+   - intuit-oauth (official) + direct HTTP calls for reports
+   - One app, four brands (separate realmIDs, separate tokens per brand)
+   - Builder tier: free, 500K CorePlus reads/month
+   - Reports: P&L, Balance Sheet, Cash Flow, AR/AP Aging, Trial Balance, General Ledger
+   - No read-only scope exists — enforce read-only in code (only GET requests)
+   - OAuth flow: standard auth code grant, similar to Google
+   - Tokens: access 1hr (auto-refresh), refresh 5yr
+   - BLOCKED: waiting for Joe to create Intuit Developer app
+
+BUGS FIXED (Session 9):
+9. Slack event delivery stopped — Slack suspended HTTP delivery after repeated 401s
+   from scanner traffic hitting the endpoint without x-slack-signature headers.
+   Fix: URL remove/re-add/save cycle in Slack Event Subscriptions page.
+
+10. Brave Search gzip parse failure — web_search sent Accept-Encoding:gzip but didn't
+    decompress the response. Brave sometimes gzip-compresses, causing JSON.parse to fail.
+    Fix: Removed gzip header from the Brave Search API call.
+
+11. Noisy debug logging — internet scanners spamming the Tailscale Funnel URL caused
+    massive log pollution (path traversal attempts, .env probes, actuator endpoints).
+    Fix: Filtered HTTP logging to only show requests with x-slack-signature header.
+
+KEY LESSON — HTTP MODE RECOVERY:
+If Jin stops receiving Slack messages in HTTP mode:
+  1. Check Event Subscriptions page at api.slack.com/apps
+  2. Remove the Request URL → Save Changes
+  3. Re-enter: https://agents-mac-mini.tail8173ed.ts.net/slack/events
+  4. Wait for green Verified → Save Changes
+  This resets Slack's delivery state. Events should resume immediately.
+
+FILES CHANGED (Session 9):
+  - agent.js: ExpressReceiver, ack UX (WAIT_PHRASES + 30s timer), Brave gzip fix,
+    Slack-only request logging
+  - .env: BRAVE_SEARCH_API_KEY added (was already placeholder)
+
+TEAM ROSTER UPDATE:
+  Jin received additional team members via Slack conversation (Session 8 overflow):
+  - Richelle, Sultan, Abdullah, Jessica Vuong, Jessica Ko, Anne (Princess)
+  - Eileen (bookkeeper), XOA Tax (CPA), Louisa Zhou (General Counsel)
+  Total confirmed: 23+ people across Marketing, Finance/Legal, Logistics, Marketplace, Creative, Warehouse

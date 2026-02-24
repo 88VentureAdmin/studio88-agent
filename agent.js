@@ -7,7 +7,7 @@
  */
 
 require('dotenv').config();
-const { App, SocketModeReceiver } = require('@slack/bolt');
+const { App, SocketModeReceiver, ExpressReceiver } = require('@slack/bolt');
 const { SocketModeClient } = require('@slack/socket-mode');
 const Anthropic = require('@anthropic-ai/sdk');
 const { google } = require('googleapis');
@@ -1156,13 +1156,13 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
         const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(input.query)}&count=${count}`;
         const searchResult = await new Promise((resolve, reject) => {
           https.get(searchUrl, {
-            headers: { 'Accept': 'application/json', 'Accept-Encoding': 'gzip', 'X-Subscription-Token': apiKey },
+            headers: { 'Accept': 'application/json', 'X-Subscription-Token': apiKey },
           }, (res) => {
             const chunks = [];
             res.on('data', (c) => chunks.push(c));
             res.on('end', () => {
               try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-              catch (e) { reject(e); }
+              catch (e) { reject(new Error(`Brave Search parse error: ${e.message} (status ${res.statusCode})`)); }
             });
           }).on('error', reject);
         });
@@ -2348,19 +2348,15 @@ function resolveMessageText(message) {
 
 // ─── Thinking Indicator ───────────────────────────────────────────────────────
 
-const ACK_PHRASES = [
-  'on it...',
-  'got it, one sec...',
-  'thinking...',
-  'on it, give me a moment...',
-  'reading this...',
-  'let me think on that...',
-  'got it...',
-  'on it...',
+const WAIT_PHRASES = [
+  'one sec...',
+  'still on it...',
+  'pulling that together...',
+  'working on it...',
 ];
 
-function randomAck() {
-  return ACK_PHRASES[Math.floor(Math.random() * ACK_PHRASES.length)];
+function randomWaitPhrase() {
+  return WAIT_PHRASES[Math.floor(Math.random() * WAIT_PHRASES.length)];
 }
 
 // ─── Message Handler ──────────────────────────────────────────────────────────
@@ -2390,8 +2386,8 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
     systemPrompt = systemPrompt + '\n\n⚠️ FALLBACK MODE: Mac Mini is currently offline. You are responding from Render (cloud). You have Gmail and Calendar access but no shell or filesystem access. Let Joe know you\'re in fallback mode and what you can and can\'t help with.';
   }
 
-  // Post immediate ack
-  const ackPayload = { channel, text: randomAck() };
+  // Post immediate ack — just "ok"
+  const ackPayload = { channel, text: 'ok' };
   if (replyInThread) ackPayload.thread_ts = replyInThread;
   let ackMsg;
   try {
@@ -2412,6 +2408,14 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
   const entry = activeRequests.get(threadKey);
   if (entry?.controller === controller) entry.ackTs = ackMsg.ts;
 
+  // Progress timer — if no streaming text after 30s, show "one sec..."
+  let streamingStarted = false;
+  const waitTimer = setTimeout(() => {
+    if (!streamingStarted && !controller.signal.aborted) {
+      client.chat.update({ channel, ts: ackMsg.ts, text: randomWaitPhrase() }).catch(() => {});
+    }
+  }, 30000);
+
   try {
     const userContent = await buildUserContent(text, files, botToken);
 
@@ -2423,6 +2427,8 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
 
     // Stream response — update Slack message in real-time as tokens arrive
     const reply = await callClaude(systemPrompt, history, userContent, controller.signal, (partialText) => {
+      streamingStarted = true;
+      clearTimeout(waitTimer);
       client.chat.update({ channel, ts: ackMsg.ts, text: partialText }).catch(() => {});
     }, { slackClient: client, channel });
 
@@ -2460,6 +2466,7 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
       console.error('  ✗ error update also failed:', updateErr.message);
     }
   } finally {
+    clearTimeout(waitTimer);
     if (activeRequests.get(threadKey)?.controller === controller) {
       activeRequests.delete(threadKey);
     }
@@ -2568,9 +2575,20 @@ async function main() {
 
   if (useHttpMode) {
     // HTTP mode — Slack sends events via HTTP POST, no WebSocket, built-in retries
+    const receiver = new ExpressReceiver({
+      signingSecret: process.env.SLACK_SIGNING_SECRET,
+      processBeforeResponse: true,
+    });
+    // Log Slack requests only (skip internet scanner noise)
+    receiver.router.use((req, res, next) => {
+      if (req.headers['x-slack-signature'] || req.headers['x-slack-request-timestamp']) {
+        console.log(`  [HTTP] ${req.method} ${req.url} sig=present ts=${req.headers['x-slack-request-timestamp']} ip=${req.headers['x-forwarded-for'] || 'local'}`);
+      }
+      next();
+    });
     app = new App({
       token: botToken,
-      signingSecret: process.env.SLACK_SIGNING_SECRET,
+      receiver,
     });
     console.log('  ✓ Mode: HTTP (reliable — no WebSocket, Slack retries failed deliveries)');
   } else {
