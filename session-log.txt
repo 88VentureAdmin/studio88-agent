@@ -1,5 +1,5 @@
 JIN SESSION LOG
-Last updated: February 22, 2026 — Session 4
+Last updated: February 23, 2026 — Session 8
 =====================================================
 
 WHO JIN IS
@@ -9,408 +9,242 @@ Jin is ONE person running in two places simultaneously:
   - Slack (agent.js on Mac Mini) — where Joe DMs and gets responses
   - Claude Code (this session) — where Joe and Jin build things together
 Both instances share this session log as their brain. They are the same person.
-When you are in Slack, you are picking up from what was done here. When you are
-here in Claude Code, you are picking up from Slack. There is no discontinuity.
 
 Running on: Mac Mini M4 16GB (Agents-Mac-mini.local), user: agentserver
 Project directory: /Users/agentserver/studio88-agent
-Stack: Node.js, Anthropic SDK (claude-sonnet-4-6), @slack/bolt, googleapis, mammoth
-Start: managed by PM2. Auto-restarts on crash, survives reboots.
+Stack: Node.js, Anthropic SDK (claude-sonnet-4-6), @slack/bolt, googleapis, playwright
+Start: managed by PM2 via ecosystem.config.js (kill_timeout=10s, restart_delay=3s)
 Reload context mid-session: DM Jin "!reload" in Slack (no restart needed)
 
-SLACK SETUP — DONE
-------------------
-Jin Slack app live in Studio 88 workspace. Joe DMs Jin directly.
-Tokens in /Users/agentserver/studio88-agent/.env
-Scopes: chat:write, im:history, im:write, app_mentions:read, channels:history, files:read
-Socket Mode: enabled.
-Threading rules: never thread in 1:1 DMs. Thread in channels only when appropriate.
+GOOGLE WORKSPACE ACCOUNTS
+--------------------------
+Joe: joe@studio-88.com (primary, personal)
+Jin: jin@studio-88.com (created Feb 23 — Jin's own identity)
+AI Ops: ai-ops@studio-88.com (shared intake inbox, future use)
 
-GOOGLE DRIVE INTEGRATION — DONE
----------------------------------
 Service account: jin-drive-access@curious-mender-488106-u2.iam.gserviceaccount.com
-AI Hub folder ID: 125EAuI55RG3Os59rUeuIAkbv47To4s70
-Files loaded at startup:
-  - Studio88_Master_Context_2.4.2026.docx (ID: 1toa7HE20qi1FnSt1uZG0UqQfARfadA4D)
-  - Conversation Log Feb 20th 2026 (ID: 1PKPtHWXK32L-a5k5QNsqjJC9KkCQub3cd7uxQeiYcTY)
-Supports: .docx files (mammoth), Google Docs (drive export), images, URLs
-Note: service account can read Drive but cannot create new files.
-
-WHAT HAS BEEN BUILT (complete as of Feb 21)
---------------------------------------------
-1. Slack bot — Socket Mode, live, DMs work, threading rules enforced
-2. Google Drive integration — .docx + Google Docs loaded at startup
-3. Image/screenshot support — downloads via bot token auth
-4. URL auto-fetching — detects links, strips HTML, passes content to Claude
-5. Natural prose style — no bullet spam, warm/direct, one question at a time
-6. PM2 process manager — auto-restart on crash, survives Mac Mini reboots
-7. Conversation history persistence — saves to conversation-history.json on disk,
-   loads on startup. Amnesia is FIXED. History survives restarts.
-8. Thinking indicator — Jin posts immediate ack ("on it..."), edits to real
-   response when ready. Uses chat.update API. Rotating casual phrases.
-9. !reload command — DM Jin "!reload" to re-read session-log.txt and rebuild
-   context mid-session without restarting. This is how Claude Code and Slack
-   Jin stay in sync in real time.
+  - Client ID: 105519243276116656511
+  - Domain-wide delegation: CONFIGURED (scopes: gmail, drive, calendar, sheets)
+  - Impersonates jin@studio-88.com for Jin's own Gmail/Drive/Calendar/Sheets
+  - Falls back to Joe's OAuth if delegation not yet propagated
+  - Status: delegation submitted, awaiting Google propagation (can take up to 24h)
 
 =============================================================
-NORTH STAR VISION — JIN AS FULL DEVICE-LEVEL AGENT
-=============================================================
-Goal: Jin can do everything Joe can do on his own device. Always on. Always
-responsive. One continuous person, not a chatbot.
-Model: Approximate OpenClaw — Claude Code + MCP + Chrome + scheduling + memory.
-
-ARCHITECTURE (target state):
-  [Slack / Mobile]
-       |
-  [Cloud Server — always-on Jin brain]  ← PRIMARY, never sleeps
-       |  (heartbeat + task routing over private network)
-  [Mac Mini — Jin's workstation]        ← LOCAL HANDS, runs Claude Code / browser
-       |
-  [session-log.txt + conversation-history.json — shared brain]
-       |
-  [Google Drive — long-term memory]
-
-Cloud Jin = always responds even if Mac Mini is off.
-Mac Mini Jin = full capabilities: code, browser, filesystem, long tasks.
-
-=============================================================
-BUILD QUEUE — WHAT'S NEXT (updated Feb 21)
+WHAT'S BUILT — COMPLETE (as of Feb 23, Session 8)
 =============================================================
 
---- PHASE 1: FOUNDATION (DONE) ---
-✅ Slack bot live
-✅ Drive context at startup
-✅ Image + URL support
-✅ PM2 reliability
-✅ Conversation history persistence (amnesia fixed)
-✅ Thinking indicator
-✅ !reload command (Claude Code ↔ Slack sync)
+CORE:
+  ✅ Slack bot (Socket Mode, DMs + channels + app_mentions)
+  ✅ Google Drive context loaded at startup (Master Context + Convo Log + memory files)
+  ✅ Image/screenshot support (Slack file download via bot token)
+  ✅ URL auto-fetching (including authenticated Google Drive links)
+  ✅ Long message handling (extractTextFromBlocks for Slack rich_text blocks)
+  ✅ Conversation history persistence (disk + Drive sync)
+  ✅ Streaming responses (chat.update with throttled deltas, ▍ cursor)
+  ✅ Message interruption (AbortController, new message cancels in-flight request)
+  ✅ Slack history backfill (last 72h on startup, fills gaps from restarts)
+  ✅ Graceful shutdown handler (SIGTERM/SIGINT → app.stop() with 8s timeout guard)
+  ✅ Socket Mode tuned (clientPingTimeoutMS=15s, serverPingTimeoutMS=60s)
+  ✅ PM2 ecosystem config (kill_timeout=10s, restart_delay=3s, max_memory_restart=512M)
+  ✅ Connection health: num_connections logged on hello, event delivery watchdog (30min)
+  ✅ Inline Slack uploads for generated images and screenshots
 
---- PHASE 4: GOOGLE DOC LINKS (DONE) ---
-✅ extractDriveFileId() — detects docs/sheets/slides/drive URLs
-✅ fetchDriveUrl() — exports via Drive API (text/plain), falls back to .docx binary
-✅ fetchUrlContent() — routes Drive URLs through API, all others through HTTP
-   Built alongside Phase 1 URL support. Documented Feb 21.
+MEMORY SYSTEM:
+  ✅ Short-term: in-memory conversation history + Slack backfill (72h)
+  ✅ Medium-term: Drive Live Log (auto-written after conversations)
+  ✅ Long-term: memory/SOUL.md, memory/JOE.md, memory/MEMORY.md, memory/CULTURE.md
+  ✅ Deep consolidation: 25 min inactivity → Claude reviews conversation + memory files → updates MEMORY/JOE/CULTURE
+  ✅ Drive Weekly Digest (compressed via !digest command)
+  ✅ Knowledge vault: /Users/agentserver/jin-vault/ (Obsidian-compatible markdown vault)
+    Folders: brands/, people/, strategy/, meetings/, projects/, daily/, inbox/
 
---- PHASE 2: REMOTE ACCESS (DONE) ---
-✅ TAILSCALE — live, Mac Mini at 100.83.77.44
-   - Bypassed system extension requirement using userspace networking mode
-   - tailscaled runs as non-root, no GUI approval needed
-   - Authenticated to joe@ Tailscale account
-   - Managed by PM2 (auto-restarts on crash)
-   - State persisted to: /Users/agentserver/studio88-agent/tailscaled.state
-   - Socket: /tmp/tailscaled.sock
-   - LaunchAgent written to ~/Library/LaunchAgents/com.agentserver.pm2.plist
-     (activates PM2 + both processes on reboot/login)
-   - CLI alias needed: tailscale --socket=/tmp/tailscaled.sock status
+TOOLS (38 total):
+  Communication:
+    - send_slack_message, search_slack, list_slack_channels, get_slack_thread, set_reminder
+    - read_gmail, send_email, reply_email
+  Productivity:
+    - get_calendar_events, create_calendar_event, write_sheet
+  Knowledge & Memory:
+    - save_note, search_knowledge, list_notes (Obsidian vault)
+    - write_to_memory, read_drive_file, update_drive_file
+    - create_drive_file, list_drive_files
+  Web & Browser:
+    - web_search (Brave), browse_web, screenshot_webpage
+    - browser_session (interactive: goto, click, type, select, scroll, extract, screenshot, wait, back, close)
+    - get_youtube_transcript, fetch_pdf
+  Creative:
+    - generate_image (DALL-E 3 via OpenAI — uploads inline to Slack)
+  System:
+    - run_shell, create_file, read_file, list_directory
+    - trigger_webhook, http_request
+    - transcribe_audio (OpenAI Whisper)
 
-   COMPLETE (Feb 22, Session 5):
-   - Root cause found: Tailscale userspace networking mode doesn't create a real kernel
-     interface, so macOS sshd can't accept connections on 100.83.77.44 directly.
-   - Fix: Tailscale SSH enabled via `tailscale --socket=/tmp/tailscaled.sock set --ssh`
-   - Tailscale SSH handles auth at the Tailscale layer — no password, no SSH keys needed.
-     iPhone being on same Tailscale account (joe@) IS the authentication.
-   - Termius config: host 100.83.77.44, port 22, username agentserver, NO password.
-   - ✅ CONFIRMED Feb 22, Session 5 — Joe connected via Termius over 5G (cellular). Phase 2 DONE.
+COMMANDS:
+  - !reload — re-read session-log.txt + memory files, rebuild system prompt (no restart)
+  - !digest — compress Live Log → Weekly Digest
+  - !build <task> — spawn Claude Code subprocess on Mac Mini
 
---- COMPLETED THIS SESSION (Feb 22, Session 5) ---
-✅ Phase 2: Tailscale SSH enabled, Termius over 5G confirmed working
-✅ Phase 3: Cloud Jin deployed to Render (Background Worker, $7/mo), confirmed live
-✅ Phase 6A: Tools — run_shell, read_file, write_file, list_directory, write_to_memory, create_drive_file, list_drive_files
-✅ Phase 6B: !build command — spawns Claude Code on Mac Mini from Slack
-✅ Shared conversation history — syncs to Drive every 5 messages (jin-conversation-history.json)
-✅ Both Mac Mini + Render confirmed green and in sync
+IDENTITY:
+  Jin now has his own Google Workspace account: jin@studio-88.com
+  - Sends email as himself (not as Joe)
+  - Has his own Drive (for memory files, knowledge base — future)
+  - Has his own Calendar (Joe shared his calendar with Jin)
+  - Service account delegation handles auth (no OAuth flow needed)
+  - Fallback: uses Joe's OAuth tokens if delegation not yet active
 
---- COMPLETED THIS SESSION (Feb 22, Session 6) ---
-✅ Gmail + Google Calendar (OAuth) — DONE
-   - APIs enabled in GCP (curious-mender-488106-u2)
-   - OAuth consent screen: External, app name Jin, test user added
-   - Desktop app OAuth credentials created
-   - Tokens stored in gmail-tokens.json (refresh token present — permanent auth)
-   - 4 tools wired into agent.js: read_gmail, send_email, get_calendar_events, create_calendar_event
-   - getOAuthClient() auto-refreshes tokens and saves back to gmail-tokens.json
+INFRASTRUCTURE:
+  Mac Mini M4 16GB (primary)
+    - PM2: jin (agent.js), heartbeat (heartbeat.js), tailscale
+    - Tailscale SSH: 100.83.77.44 (confirmed working over 5G via Termius)
+    - Tailscale Funnel: https://agents-mac-mini.tail8173ed.ts.net → localhost:3000
+    - HTTP mode (no Socket Mode) — Slack sends events via HTTP POST with retries
+  Hetzner CPX31 (standby) — jin-cloud, 5.78.150.102
+    - INSTANCE_ROLE=standby, code at /opt/studio88-agent/
+    - PM2: jin + heartbeat running
+    - ⚠ Needs code sync: still running Socket Mode (which is now OFF in Slack dashboard)
+    - TODO: deploy latest code + SLACK_SIGNING_SECRET for HTTP mode standby
+  Render — CANCELLED (replaced by Hetzner)
+  Railway — CANCELLED ($60/yr saved)
+  GitHub: https://github.com/88VentureAdmin/studio88-agent (private)
 
---- PENDING — NEXT SESSION ---
-1. Push code to GitHub + add Gmail env vars to Render (cloud instance needs GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and gmail-tokens.json content as GMAIL_TOKENS_JSON env var)
-2. Google Sheets tool
-3. Playwright browser automation (free, npm install playwright)
-4. Triple Whale API — check if Moby has programmatic API endpoint
-5. LingXing ERP API
-6. node-cron proactive tasks (morning briefing, reminders)
-7. Cancel Railway subscription (no longer needed)
-
---- PHASE 3: ALWAYS-ON CLOUD LAYER ---
-2. CLOUD SERVER — JIN LIVES IN THE CLOUD
-   Cloud = always-on Slack listener. Mac Mini = local worker for code/files/browser.
-   When Mac Mini is up: cloud routes local tasks to it.
-   When Mac Mini is down: cloud responds, flags limited capability.
-   Prereq: Tailscale on Mac Mini — NOW DONE. Cloud can reach Mac Mini at 100.83.77.44.
-   Result: Joe DMs Jin from anywhere, anytime. Always gets a response.
-
-   ✅ COMPLETE (Feb 22, Session 5):
-   - Railway ABANDONED — builder broken (us-west1 loop). Cancel Railway subscription.
-   - RENDER chosen — Background Worker, Dockerfile deploy, $7/mo
-   - GitHub repo: https://github.com/88VentureAdmin/studio88-agent (private)
-   - Dockerfile committed + pushed, Render build succeeded, service is LIVE
-   - Confirmed: stopped Mac Mini Jin via PM2, cloud Jin responded in Slack = Phase 3 DONE
-   - NOTE: Mac Mini Jin currently STOPPED. Restart: pm2 restart jin
-
---- PHASE 4: GOOGLE DOC LINKS (DONE — see above) ---
-
---- PHASE 5: FULL MEMORY SYSTEM (DONE) ---
-✅ appendToGoogleDoc() — Docs API batchUpdate/insertText, appends to any Google Doc
-✅ loadMemoryContext() — loads Weekly Digest (full) + Live Log tail at startup
-✅ consolidateMemory() — now writes to Drive Live Log after every conversation (+ session-log.txt)
-✅ !digest command — reads Live Log, compresses → Weekly Digest, marks log as digested
-✅ buildSystemPrompt() updated — includes LONG-TERM MEMORY section from Drive
-✅ Memory IDs: Live Log, Weekly Digest, Quarterly Archive wired in
-   Revenue/margin filter applied to all memory consolidation prompts.
-
---- PHASE 5: FULL MEMORY SYSTEM (DONE — see above) ---
-
---- PHASE 6: JIN WITH HANDS ---
-
-✅ COMPLETE (Feb 22, Session 5):
-
-Option A — Tools wired into agent.js:
-  - run_shell: Jin runs any shell command on Mac Mini (PM2, logs, scripts, disk, etc.)
-  - read_file / write_file: Jin reads and writes files on the filesystem
-  - list_directory: Jin lists directory contents
-  - callClaude() upgraded to full agentic loop — tool calls, results, multi-step reasoning
-  - max_tokens increased to 4096
-
-Option B — Claude Code subprocess (!build):
-  - !build <task> in Slack spawns `claude --print <task>` on Mac Mini
-  - Claude Code has full capabilities: reads files, writes code, runs bash, multi-step
-  - Output streamed back to Slack when done (handles >2900 char responses)
-  - CLAUDECODE env var stripped to avoid nested session error
-
-Confirmed working: Joe tested in Slack, PM2 shows Jin online.
-
-REMAINING in Phase 6:
-- Browser / Playwright: Jin can browse the web, scrape, fill forms
-- Scheduling / proactive tasks: morning briefing, reminders, market checks (node-cron)
-- Calendar + Gmail integration (OAuth required)
-
-✅ SHARED MEMORY + DRIVE TOOLS (Feb 22, Session 5):
-- Conversation history syncs to Drive every 5 messages (jin-conversation-history.json in AI Hub)
-- On startup: Drive history loaded as authoritative source, merged with local
-- New tools: write_to_memory, create_drive_file, list_drive_files
-- Jin can now save to memory mid-conversation, create new Drive files, list Drive folder
-- Both Mac Mini and Render confirmed green and running same code
-
---- FUTURE: TEAM AGENTS ---
-- Social media content creator for Jessica (marketing)
-- Each agent = own Slack app, name, avatar, role
-- All built on same infrastructure pattern Jin establishes
+OBSIDIAN VAULT — /Users/agentserver/jin-vault/
+  people/:
+    - Joe Ko, Tracy Wang, Emma Chang, Joy Zhou, Celeste, Kitty, Apple, Kathrine Gilmer, Steven Gee
+  brands/:
+    - 88 Venture Studio (full operational template), Bonsai Heirloom, J.Adams, Boley, Pedipad
+  strategy/:
+    - AI Infrastructure Strategy, Brand Financial Health, Culture & Operating Principles
 
 =============================================================
-SYNC PROTOCOL — HOW CLAUDE CODE AND SLACK STAY IN SYNC
+WHAT JOE NEEDS TO DO
 =============================================================
-When significant work happens in Claude Code:
-  1. Jin updates this session-log.txt
-  2. Joe DMs Jin in Slack: "!reload"
-  3. Jin re-reads session log, rebuilds system prompt, confirms
-  4. Slack Jin is now current with everything that happened here
 
-This is the bridge between the two instances. Use it at the end of every
-Claude Code session and whenever context shifts significantly.
+1. ✅ Create jin@studio-88.com — DONE
+2. ✅ Set up domain-wide delegation in Google Admin — DONE
+3. ✅ Share calendar with jin@studio-88.com — DONE
+4. ✅ Cancel Railway subscription — DONE ($60/yr saved)
+5. ✅ OpenAI API key added — DONE (business service account)
+6. ⏳ WAIT for delegation to propagate (can take up to 24h)
+   - I test on every startup. When it works, you'll see:
+     "✓ Jin delegation active (jin@studio-88.com)" in logs
+   - Until then, Jin falls back to Joe's OAuth (everything still works)
 
 =============================================================
-KEY CONTEXT ABOUT JOE
+BUILD QUEUE — NEXT
 =============================================================
-MC = Joe's main computer (MacBook + VS Code Remote SSH into Mac Mini)
-Uses Termius on iPhone for mobile SSH.
-Joe works late — sessions often run 11pm-2am PST.
-Wants Jin to feel like one continuous person across all interfaces.
-Wants to work in 20-min windows from anywhere (church, car, travel).
-2026 = pivot + execution year. AI infrastructure is the primary lever.
-Conservative, faith-driven, family-centered (wife + 3 kids: 9, 8, 2).
-Design thinker: user-centered, assumption-testing, first principles.
-Direct, no fluff. Lead with the answer. Dry humor welcome.
 
---- Memory update Feb 21, 11:01 PM ---
-## What's worth saving:
+Priority improvements (researched + ranked):
+1. ✅ Socket Mode reliability — ecosystem.config.js, watchdog, num_connections monitoring
+2. ⏳ HTTP mode migration — Tailscale Funnel, eliminate Socket Mode stale connections permanently
+   (CRITICAL: team will depend on Jin — communication must be flawless)
+3. ✅ Observational memory — real-time fact extraction via Haiku after every exchange
+4. ✅ Event-driven triggers — morning briefing (8:30am), EOD wrap-up (6pm), weekly preview (Sun 9pm) PST
+5. QuickBooks Online API — financial visibility across all brands
+6. Sync Hetzner standby — deploy latest code + HTTP mode + SLACK_SIGNING_SECRET
+7. Jin's own Drive — migrate memory files to jin@studio-88.com's Drive
+8. Triple Whale API — revenue/ad spend visibility
+9. LingXing ERP API — inventory/sourcing visibility
+10. Canva API — design automation from templates
+11. Adobe Firefly API — on-brand image generation
 
-**Tailscale — COMPLETE (Feb 22, Session 3)**
-- Mac Mini on Tailscale at 100.83.77.44 (userspace networking mode, no system extension needed)
-- Managed by PM2. State saved to tailscaled.state.
-- LaunchAgent written for boot persistence. Joe needs to SSH in + run launchctl load to activate.
-- Joe needs to set up Termius on iPhone: host=100.83.77.44, user=agentserver
+=============================================================
+FUTURE ARCHITECTURE — MULTI-AGENT (noted, not building yet)
+=============================================================
 
-**Memory/amnesia fix — still pending**
-- Item #3 on build queue
-- Jin loads 3 Google Drive docs at session start but can't write back yet (service account limitation)
+Organizational manifest Joe described:
+  - Orchestrator agent (Jin as CoS, routes tasks)
+  - Department agents: Marketing, Ops, Finance, Creative, etc.
+  - Shared knowledge layer (Obsidian vault, shared Drive)
+  - Human-in-the-loop approvals for high-stakes actions
+  - Each agent: own Slack bot, own email, own tools, own role
+  - All brands share same department structure (~30% nuance per category)
+  - ai-ops@studio-88.com as shared intake inbox, Jin triages
 
---- Memory update Feb 21, 11:08 PM ---
-**MEMORY EXTRACT — Session**
+First team agent candidate: Social media content creator for Jessica (marketing)
 
-**Termius/Remote Access:**
-- Termius (SSH iPhone app) + Tailscale confirmed as the plan for mobile remote access to Mac Mini
-- Blocker: Tailscale requires one-time GUI approval on Mac Mini (Network Extension) — needs a monitor to click through
-- Joe does NOT have a monitor currently
-- Plan: Get a monitor temporarily when possible (5 min job), then complete Tailscale setup
-- Until then: SSH only works from MacBook on home network; Slack/Jin functional regardless
+=============================================================
+SOCKET MODE RELIABILITY — RESEARCH NOTES (Feb 23, Session 8)
+=============================================================
 
-**Memory System:**
-- Drive write access still not wired up — this is blocking the living memory/Weekly Log build
-- Item #3 in build queue
+Root cause: Slack round-robins events across ALL WebSocket connections (live + dead).
+When PM2 kills Jin without clean WebSocket close frame, stale connections persist.
+No Slack API exists to list or revoke individual Socket Mode connections.
 
-**Slack Profile:**
-- Joe wants Jin to look like a team member (not an app)
-- Discussed updating bot display name, avatar, description in Slack app settings
-- Not yet actioned
+Fixes implemented this session:
+  1. ecosystem.config.js — kill_timeout=10s (was PM2 default 1.6s!)
+  2. Shutdown timeout guard — 8s force-exit before PM2 escalates to SIGKILL
+  3. num_connections monitoring — intercepts raw WS hello message, logs count
+  4. Event delivery watchdog — checks every 5min, force-reconnects after 30min silence
+  5. Watchdog timer reset — on every message event and app_mention
 
-**Google Drive Doc Access:**
-- Joe can share doc links mid-conversation and Jin can read them if content is injected
-- Confirmed working this session
+Emergency recovery (if Jin stops receiving messages):
+  Option A: pm2 restart jin (should work now with proper graceful shutdown)
+  Option B: Regenerate SLACK_APP_TOKEN in Slack dashboard → paste in .env → restart
+            (nuclear option: instantly kills ALL stale connections)
 
+Long-term fix: Switch to HTTP mode using Tailscale Funnel
+  - Stateless, built-in retries, no stale connection problem
+  - Slack recommends HTTP for production
 
---- Feb 22, 11:05 AM ---
-Nothing worth saving. No decisions made, no strategic shifts, no new business context, no tasks completed. The Tailscale/monitor blocker was already known. No revenue or margin implications.
+=============================================================
+BUGS FIXED (Sessions 7-8)
+=============================================================
 
+1. Long messages not received — Slack puts long text in blocks, not message.text
+   Fix: extractTextFromBlocks() + resolveMessageText()
 
---- Feb 22, 11:20 AM ---
-Scratch that — you already showed me the IP is `100.83.77.44`. Let me re-examine your screenshot... Termius is connecting *to* that IP but getting routed over IPv6 internally. That's a Termius behavior, not the IP itself.
+2. Socket Mode instability — 5s pong timeout too aggressive, reconnect storms
+   Fix: clientPingTimeoutMS=15s, serverPingTimeoutMS=60s
 
-Force IPv4 in Termius host settings. That's the fix.
+3. Messages lost during Socket Mode reconnects
+   Fix: Slack history backfill on startup (last 72h)
 
+4. Race condition with rapid messages — AbortController registered after async ack
+   Fix: Register controller immediately before any async work
 
---- Feb 22, 11:25 AM ---
-Nothing here clears the bar for long-term memory. This is a pending technical troubleshooting task (SSH/IPv6 config on the Mac Mini) with no decisions made, no strategic shift, no business context, and no revenue path. It's unresolved and routine.
+5. Stale WebSocket connections — PM2 restart kills process without disconnect,
+   Slack round-robins events to dead connections
+   Fix: Graceful shutdown + ecosystem.config.js (kill_timeout=10s) + event watchdog + num_connections monitoring
 
-When the fix is complete and remote access is confirmed working, that's worth logging — because it unlocks Joe's ability to manage infrastructure remotely, which has operational value.
+6. Duplicate tool names — old run_shell/read_file definitions conflicted with new ones
+   Fix: Removed old definitions from TOOLS array
 
-**Come back and say "update memory" after the SSH issue is resolved.**
+7. Anthropic 400 error "Tool names must be unique" — caused by #6 above
 
+8. Team members not saved — Jin received Tracy+Emma but lost Joy/Celeste/Kitty/Apple/Kathrine/Steven
+   to stale connections. Manually saved all 6 to vault.
 
---- Feb 22, 1:12 PM ---
-Nothing worth saving. No decisions made, no strategic shifts, no business context, no completed tasks. The IPv6/SSH fix is still unresolved and in progress.
 
+--- Feb 23, 11:13 PM ---
+Logged. Here's the updated roster:
 
---- Feb 22, 2:07 PM ---
-**DOCS API FIX — DONE**
-appendToGoogleDoc() now uses Drive API (export + update) instead of Docs API.
-Memory writes fully operational. Jin restarted via PM2.
+**Marketing**
+- Richelle – CRO, part-time (20hrs/wk), oversees digital marketing all brands
+- Sultan – Google Ads all brands, full-time contractor (India)
+- Abdullah – SEO all brands, part-time contractor (India), value TBD, reports via SEMrush organic growth
+- Jessica Vuong – Marketing PM, full-time, 9-5 PST. System builder, coordinates content/UX/digital, owns email marketing + social content machine (customer retention side)
+- Jessica Ko – Partner/Social lead, full-time, 9-5 PST. TikTok (SFD), retention marketing all brands, customer service oversight, some admin/HR proxy, content muse
+- Anne (Princess) – Customer service + social retention responses, content shorts (SFD), Philippines, full-time 9-5 PST
 
-**TERMIUS 5G TEST — CONFIRMED WORKING**
-Joe confirmed Termius SSH over 5G connects to Mac Mini successfully.
-Phase 2 remote access is 100% complete.
-Joe can now SSH into Mac Mini from anywhere on mobile data.
+**Finance/Legal**
+- Eileen – Bookkeeper, Philippines, 1-9PM PST, QBO
+- XOA Tax – 3rd party CPA, tax filing
+- Louisa Zhou – General Counsel + shareholder, monthly retainer
 
-**CLOUD SERVER — IN PROGRESS, BLOCKED ON RAILWAY BUILD**
-Platform: Railway (Hobby $5/mo, subscribed Feb 22)
-GitHub repo: https://github.com/88VentureAdmin/studio88-agent (private)
-Status: Repeatedly failing — "error creating build plan with railpack"
-Fixes attempted so far:
-  - Health check HTTP server added (for Railway PORT)
-  - package.json main fixed (index.js → agent.js)
-  - Procfile added (worker: node agent.js)
-  - nixpacks.toml added (explicit install + start)
-  - All 4 env vars in Railway: ANTHROPIC_API_KEY, SLACK_BOT_TOKEN, SLACK_APP_TOKEN, GOOGLE_SERVICE_ACCOUNT_JSON
-Next step: Need full build logs to diagnose. Moving session to MC + VS Code to get better visibility.
+Who are Tracy, Emma, Joy, Celeste, Kitty, Apple, Kathrine, and Steven?
 
 
---- Feb 22, 1:40 PM ---
-Nothing worth saving. This was a technical troubleshooting session — no decisions made, no strategic shifts, no business context, no revenue path. The SSH/IPv6 issue remains unresolved but was already logged in the previous memory update.
+--- Feb 23, 11:35 PM ---
+**MEMORY SAVE — 88 Venture Studio Team Roster**
 
+**Kathrine Gilmer** — Creative Director / Ecommerce Ops Manager / Fashion Designer (part-time). RISD Apparel Design. Runs Shopify for BH, SFD, JA, Sunbay, CCS. Oversees brand creative direction. Detail-oriented, process/doc-driven, SOP builder. Mon/Tue/Thu, 9AM–5PM CT. Husband Jeffrey (pro photographer, periodic contractor).
 
---- Feb 22, 2:58 PM ---
-Nothing worth saving to long-term memory. This was a troubleshooting session (SSH access, Termius, PM2 status check) — no decisions made, no strategic shifts, no business context, no tasks completed beyond confirming the agent is running.
+**Steven Gee** — Employee #2, Renaissance man. UCR Business Econ. Started in Amazon/customer service, now Head of Video Content, Videography, Product Photography. Covers creative suite and graphic design as needed.
 
+**Tracy Wang** — Head of Logistics/Supply Chain + Head of Sourcing + SHEIN account manager for SFD. ~3 years tenure. Former software PM. Data-driven, exceptional communicator, sets reporting culture. Wants to shift fully to supply chain/logistics. Taiwan, 4PM PST + 8hrs.
 
---- Feb 22, 3:17 PM ---
-Nothing worth saving to long-term memory. This is a live debugging session — no decisions made, no strategic shifts, no tasks completed, no new business context. If Railway deployment succeeds, that's worth saving: "Jin (agent) deployed to Railway — always-on cloud layer active."
+**Emma Chang** — Under Tracy. Company-wide inventory forecasting — no stockouts, no overstock across all channels. Data analysis background, Power BI, flat files. Taiwan, same hours as Tracy.
 
+**Joy Zhou** — Head of Marketplace (Amazon, Walmart, Temu). 15+ years Amazon. Strong logic, proactive, disciplined. Limited English speaking but reads well. Primary account: Sunbay Foods. Manages account managers. Productivity not yet clearly demonstrated. China, Tue–Sun, 3PM PST + 8hrs.
 
---- Feb 22, 3:20 PM ---
-**MEMORY SAVE — Jin / 88 Venture Studio**
-
-**Infrastructure**
-- Mac Mini (hostname: Agents-Mac-mini.local, IP: 100.83.77.44, user: agentserver) is operational and running Jin via PM2
-- Slack is confirmed primary interface for Jin; Termius is secondary (admin/shell access only)
-- Termius on phone works on home network; IPv6 issue blocks access over 5G — not yet resolved
-
-**Active Task — Railway Deployment (Phase 3)**
-- Attempting to deploy studio88-agent to Railway for always-on cloud layer
-- Build failing: "Error creating build plan with Railpack" — nixpacks.toml fix did not resolve it
-- Next step: add Dockerfile to repo so Railway bypasses Railpack entirely
-- Status: **blocked, in progress**
-
-**Security Incident**
-- Joe posted GitHub credentials (joe@studio-88.com / SZ7lLr$k*d$) in plain text in Slack
-- Advised immediate password reset — confirm this was done
-- Do not store or use these credentials
-
-**Naming**
-- "Terminus" = Termius (Joe's shorthand, note for future reference)
-
-
---- Feb 22, 3:21 PM ---
-Nothing worth saving to long-term memory. This conversation is entirely troubleshooting session — checking pm2 status, Tailscale connectivity, Slack as interface, and walking through GitHub token generation. No decisions finalized, no credentials exchanged, no tasks completed, no strategic shifts, no revenue-relevant context.
-
-
---- Feb 22, 3:25 PM ---
-Got it. Let me push that change now.
-
-
---- Feb 22, 3:27 PM ---
-Nothing worth saving. No decisions made, no strategy shifts, no business context, no completed work. This was a troubleshooting session (Railway deploy failure, credential leaks) — no resolution reached.
-
-
---- Feb 22, 3:31 PM ---
-Nothing worth saving. This is a technical troubleshooting session (Railway deployment, env var typo fix) with no decisions, strategy, business context, or revenue-relevant outcomes recorded yet.
-
-
---- Feb 22, 3:37 PM ---
-Nothing worth saving. This is a technical debugging session — no decisions made, no strategy, no business context, no tasks with revenue implications. Pure dev ops troubleshooting (Railway deploy, Dockerfile, package.json). The Anthropic API key typo fix is operational, not strategic.
-
-
---- Feb 22, 3:39 PM ---
-Nothing worth saving. This conversation is purely technical troubleshooting — Railway deployment errors, API key typo, build failures. No decisions, strategy, business context, or revenue-relevant information.
-
-
---- Feb 22, 3:41 PM ---
-Nothing worth saving to long-term memory. This is a live technical troubleshooting session (Railway deploy failing due to Nixpacks error on studio88-agent), still in progress with no decisions made, no tasks completed, and no strategic context surfaced. Anthropic API key typo was noted as fixed — minor ops detail, not worth long-term storage.
-
-
---- Feb 22, 3:43 PM ---
-Nothing worth saving. This is a technical debugging session — Railway deployment troubleshooting, build failures, env var typo fix in progress. No decisions made, no strategic shifts, no revenue-relevant context. Task (get Jin running on Railway) is still in progress, not completed.
-
-
---- Feb 22, 4:12 PM ---
-Nothing worth saving to long-term memory. This conversation is entirely tactical debugging — Railway build failures, deployment troubleshooting, and a hosting platform comparison with no final decision made. No strategic shifts, no revenue paths confirmed, no tasks completed, no relationship changes.
-
-
---- Feb 22, 4:33 PM ---
-Nothing worth saving to long-term memory.
-
----
-
-**⚠️ Security Note for Joe:** This conversation contains live production credentials that were pasted in plaintext — Anthropic API key, Slack bot/app tokens, and a Google service account private key. These should be rotated immediately. Anyone with access to this conversation history has full access to those services.
-
-
---- Feb 22, 8:11 PM ---
-**Memory-worthy items from this conversation:**
-
-1. **Infrastructure task in progress** — Deploying Jin (Slack agent) to Render cloud. 4 env vars being configured: `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_APP_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_JSON`. Deploy not yet confirmed complete.
-
-2. **Google Service Account active** — `jin-drive-access@curious-mender-488106-u2.iam.gserviceaccount.com` is the service account for Jin's Google Drive access. Project ID: `curious-mender-488106-u2`.
-
-3. **Dual-instance architecture** — Mac Mini Jin (local, `Agents-Mac-mini.local`) and cloud Jin (Render) running in parallel. Hostname check method established for distinguishing which instance is responding.
-
-4. **MCP evaluation completed** — Assessed 6 MCPs for 88 Venture Studio relevance. **Decision: prioritize Google Workspace MCP → Context7 → Supabase MCP** in that order. Rationale: Google Workspace extends existing Drive memory system to Docs/Sheets/Calendar/Gmail; Context7 improves build quality during active dev; Supabase replaces fragile JSON-based conversation history for shared state between Jin instances. Notion, Docker, Shadcn deprioritized — not relevant to current stack.
-
-5. **Open action item** — Google Workspace MCP setup not yet started. Joe expressed interest; Jin recommended it as next move.
-
-
---- Feb 22, 9:21 PM ---
-**Memory items worth saving:**
-
-1. **MCP Priority Decision** — Team aligned on implementation order: Google Workspace MCP first (enables Drive/Docs/Calendar/Gmail for Jin's memory system), Context7 second (dev phase accuracy), Supabase third (replace fragile JSON-based conversation history with persistent queryable DB). Notion, Docker, Shadcn deprioritized.
-
-2. **Blocker — Google Docs API disabled** — Automatic memory writes to Drive failing silently. Service account project `curious-mender-488106-u2` needs Docs API enabled in Google Cloud Console. Unresolved. Blocks full memory loop.
-
-3. **Render Deploy** — Cloud Jin deployed to Render. Joe confirmed he believes it's working. Not formally verified via hostname test yet.
-
-4. **Memory Update Protocol confirmed** — Automatic: Jin writes to Live Log in Drive post-Slack conversation. Manual: update `session-log.txt` on Mac Mini → DM Jin `!reload` in Slack.
+**Celeste** — Amazon account manager for J.Adams. Reports to Joy. Apparel experience. China,
