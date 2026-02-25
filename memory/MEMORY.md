@@ -79,3 +79,68 @@
 - Render needs Gmail OAuth as env vars (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN), not a tokens file
 - Service accounts cannot own files in Google Drive (no storage quota) — use OAuth client for file creation
 - ANTHROPIC_API_KEY must be trimmed of whitespace — Render sometimes adds trailing newlines to env vars
+
+
+## Updated Feb 24, 2026
+
+## Self-Improvement Protocol (Added May 24 2025)
+
+- Jin is to conduct a **quarterly web search** to self-evaluate current memory architecture, tools, and AI agent best practices
+- Review what others are doing differently, identify better approaches, and either:
+  - Bring recommendations to Joe for approval, OR
+  - Apply edits directly if clearly within scope
+- First review due: **~May 24 2025** (3 months from directive)
+- Rationale: AI tech changes on a months-long cycle — static tooling becomes outdated fast
+- This is Joe-directed and standing — no need to re-confirm each quarter
+
+## Railway Deployment — Current Status (Feb 23 2026)
+
+- Active blocker: Nixpacks fails instantly (0 seconds) with no useful error output
+- Fix in progress: Replace Nixpacks with a Dockerfile — Railway always prefers Dockerfile if present
+- Dockerfile has been pushed to repo but build outcome not yet confirmed
+- Variable fix: `ANTRHOPIC_API_KEY` (typo) needs to be deleted and re-added as `ANTHROPIC_API_KEY` — Joe has been instructed but confirmation not received
+- `package.json` location on Mac Mini not confirmed — `cat` command returned "No such file or directory" when run from Joe's MacBook (not Mac Mini — different machine)
+
+## Amazon FBA Fee Changes (2026 — Searched Feb 23 2026)
+
+- Average increase: +$0.08/unit
+- **Returns Processing Fee** now applies to clothing, footwear, and fashion accessories — direct hit to J.Adams given 35%+ return rate
+- FBA Prep & Labeling services ending in the US in 2026
+- Low-Price FBA now $0.86 cheaper than standard FBA (up from $0.77)
+- Peak season fees ran Oct 15 2025 – Jan 14 2026 (closed)
+- Storage fee consolidation: bulky items swing $0.32–$5.72/unit
+- Action item: model out per-unit return fee impact on J.Adams P&L — not yet done
+
+
+## Updated Feb 24, 2026
+
+## Team Assessment Project (initiated ~Feb 2026)
+
+- Joe is evaluating full-time, computer-based team members for AI-era fit using Kolbe A + CliftonStrengths Top 5 + a custom AI literacy self-assessment Jin will build
+- Criteria for inclusion: full-time, computer-based, AI-displaceable — excludes warehouse (physical labor), part-time contractors, and anyone whose fate is contingent on another person's outcome
+- Total cost: ~$693 for 9 people ($495 Kolbe A + $198 CliftonStrengths Top 5)
+- Jin will read all assessment results + cross-reference against minimum org structure + Joe's gut-read on each person to produce a diagnostic recommendation on role fit, mismatches, and sequencing
+
+## Final Assessment Cohort (9 people)
+
+1. Jessica Ko
+2. Jessica Vuong
+3. Jeffrey (Philippines — Walmart/Temu AM)
+4. Anne / Princess (CS)
+5. Kathrine Gilmer (Creative Director)
+6. Steven Gee (Video/Photo)
+7. Tracy Wang (Logistics/Supply Chain)
+8. Emma Chang (Forecasting)
+9. Joy Zhou (Marketplace — Amazon)
+
+**Excluded and why:**
+- Abdullah — not full-time
+- Sultan — replaced by Jeffrey Philippines
+- Celeste + Kitty — fate tied to Joy Zhou; if Joy goes, they go
+- Cindy + Jose — warehouse/physical labor
+- Richelle — part-time
+- Jeffrey Gilmer — part-time contractor
+
+**Note:** Celeste and Kitty are both linked to the marketplace/Joy Zhou cluster — if Joy doesn't work out, both would be laid off alongside her.
+
+---

@@ -54,6 +54,12 @@ const AI_HUB_FOLDER_ID = '125EAuI55RG3Os59rUeuIAkbv47To4s70';
 const HISTORY_DRIVE_FILENAME = 'jin-conversation-history.json';
 let historyDriveFileId = null; // resolved at startup
 
+const MEMORY_BACKUP_FILES = {
+  'MEMORY.md': null,  // Drive file IDs, resolved at startup
+  'JOE.md': null,
+  'CULTURE.md': null,
+};
+
 const HEARTBEAT_DRIVE_FILENAME = 'jin-heartbeat.json';
 const HEARTBEAT_STALENESS_MS = 30 * 60 * 1000; // 30 minutes — Render only activates after Mac Mini has been silent this long
 let heartbeatFileId = null; // cached at first check
@@ -192,6 +198,28 @@ async function appendToGoogleDoc(docId, text) {
   }
 }
 
+async function clearGoogleDoc(docId) {
+  try {
+    const auth = getGoogleAuthClient();
+    const docs = google.docs({ version: 'v1', auth });
+    const doc = await docs.documents.get({ documentId: docId });
+    const endIndex = doc.data.body.content.slice(-1)[0]?.endIndex;
+    if (!endIndex || endIndex <= 2) return; // already empty
+    await docs.documents.batchUpdate({
+      documentId: docId,
+      requestBody: {
+        requests: [{
+          deleteContentRange: {
+            range: { startIndex: 1, endIndex: endIndex - 1, segmentId: '' },
+          },
+        }],
+      },
+    });
+  } catch (err) {
+    console.warn(`  ✗ Failed to clear doc ${docId}: ${err.message}`);
+  }
+}
+
 // ─── Drive Conversation History Sync ─────────────────────────────────────────
 
 async function resolveHistoryDriveFile() {
@@ -250,6 +278,53 @@ async function saveHistoryToDrive(map) {
   }
 }
 
+// ─── Drive Memory File Backups ────────────────────────────────────────────────
+
+async function resolveMemoryBackupFiles() {
+  const drive = getDriveClientOAuth();
+  for (const name of Object.keys(MEMORY_BACKUP_FILES)) {
+    const driveName = `jin-memory-${name}`;
+    try {
+      const res = await drive.files.list({
+        q: `name='${driveName}' and '${AI_HUB_FOLDER_ID}' in parents and trashed=false`,
+        fields: 'files(id)',
+      });
+      if (res.data.files.length > 0) {
+        MEMORY_BACKUP_FILES[name] = res.data.files[0].id;
+        console.log(`  ✓ Found Drive backup: ${driveName}`);
+      } else {
+        const content = fs.existsSync(`./memory/${name}`) ? fs.readFileSync(`./memory/${name}`, 'utf8') : '';
+        const created = await drive.files.create({
+          requestBody: { name: driveName, parents: [AI_HUB_FOLDER_ID], mimeType: 'text/plain' },
+          media: { mimeType: 'text/plain', body: content },
+          fields: 'id',
+        });
+        MEMORY_BACKUP_FILES[name] = created.data.id;
+        console.log(`  ✓ Created Drive backup: ${driveName}`);
+      }
+    } catch (err) {
+      console.warn(`  ✗ Could not resolve ${driveName}:`, err.message);
+    }
+  }
+}
+
+async function syncMemoryFilesToDrive() {
+  const drive = getDriveClientOAuth();
+  for (const [name, fileId] of Object.entries(MEMORY_BACKUP_FILES)) {
+    if (!fileId) continue;
+    try {
+      const content = fs.existsSync(`./memory/${name}`) ? fs.readFileSync(`./memory/${name}`, 'utf8') : '';
+      await drive.files.update({
+        fileId,
+        media: { mimeType: 'text/plain', body: content },
+      });
+    } catch (err) {
+      console.warn(`  ✗ Failed to sync ${name} to Drive:`, err.message);
+    }
+  }
+  console.log('  ✓ Memory files synced to Drive');
+}
+
 function loadSessionLog() {
   const logPath = './session-log.txt';
   if (fs.existsSync(logPath)) {
@@ -260,6 +335,21 @@ function loadSessionLog() {
     return tail;
   }
   return null;
+}
+
+function getVaultStats() {
+  const categories = ['people', 'brands', 'strategy', 'operations', 'finance'];
+  const counts = [];
+  let total = 0;
+  for (const cat of categories) {
+    const dir = path.join('/Users/agentserver/jin-vault', cat);
+    if (fs.existsSync(dir)) {
+      const count = fs.readdirSync(dir).filter(f => f.endsWith('.md')).length;
+      if (count > 0) counts.push(`${cat}: ${count}`);
+      total += count;
+    }
+  }
+  return total > 0 ? `${total} notes (${counts.join(', ')})` : 'empty';
 }
 
 function loadMemoryFiles() {
@@ -1483,7 +1573,21 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
           case 'screenshot': {
             const screenshotPath = `/tmp/browser-${session.id}-${Date.now()}.png`;
             await page.screenshot({ path: screenshotPath, fullPage: false });
-            return `Screenshot saved: ${screenshotPath}\nSession ID: ${session.id}`;
+            // Upload to Slack so the user can actually see it
+            if (slackClient && channel) {
+              try {
+                const fs = require('fs');
+                await slackClient.files.uploadV2({
+                  channel_id: channel,
+                  file: fs.createReadStream(screenshotPath),
+                  filename: `screenshot-${Date.now()}.png`,
+                  initial_comment: `Browser screenshot: ${page.url()}`,
+                });
+              } catch (uploadErr) {
+                console.warn('  ⚠ Slack browser screenshot upload failed:', uploadErr.message);
+              }
+            }
+            return `Screenshot saved and uploaded to Slack: ${screenshotPath}\nSession ID: ${session.id}`;
           }
           case 'wait': {
             const waitSec = Math.min(input.wait_seconds || 3, 15);
@@ -1919,6 +2023,12 @@ SESSION LOG (recent ops tail)
 ${sessionLog}
 
 ` : ''}─────────────────────────────────────────
+KNOWLEDGE VAULT (jin-vault)
+─────────────────────────────────────────
+
+You have a structured knowledge base with ${getVaultStats()}  across categories: people, brands, strategy, operations, finance. These are facts extracted from past conversations. Use the search_knowledge tool when Joe asks about a person, brand, decision, or topic that might have been discussed before. Use list_notes to browse categories. This vault is your long-term factual memory — check it before saying "I don't have context on that."
+
+─────────────────────────────────────────
 BUSINESS CONTEXT (Google Drive)
 ─────────────────────────────────────────
 
@@ -2276,11 +2386,83 @@ If a file doesn't need updating, skip it entirely. Be concise and factual. Only 
     fs.appendFileSync('./session-log.txt', deepEntry, 'utf8');
     await appendToGoogleDoc(MEMORY_IDS.liveLog, deepEntry);
 
+    // Sync updated memory files to Drive backup
+    await syncMemoryFilesToDrive();
+
     lastDeepConsolidatedAt.set(threadKey, Date.now());
     console.log(`  [DEEP] ✓ Deep consolidation complete`);
   } catch (err) {
     console.warn('Deep consolidation failed:', err.message);
   }
+}
+
+async function runDigest() {
+  const drive = getDriveClient();
+  const res = await drive.files.export(
+    { fileId: MEMORY_IDS.liveLog, mimeType: 'text/plain' },
+    { responseType: 'text' }
+  );
+  const liveLogContent = (res.data || '').trim();
+  if (!liveLogContent || liveLogContent.length < 100) return null;
+
+  const digestResponse = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 500,
+    messages: [{
+      role: 'user',
+      content: `You are Jin, Chief of Staff to Joe Ko at 88 Venture Studio. Here are recent Live Log entries from conversations with Joe. Write a concise weekly digest entry: the most important decisions made, strategic context shifts, and business insights — especially anything with revenue or margin implications. Compress aggressively. Format as flowing prose with a date header, not bullets.
+
+Live Log:
+${liveLogContent.slice(-6000)}`,
+    }],
+  });
+
+  const digest = digestResponse.content[0].text.trim();
+  const week = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const digestEntry = `\n\n=== Week of ${week} ===\n${digest}`;
+
+  await appendToGoogleDoc(MEMORY_IDS.weeklyDigest, digestEntry);
+  await clearGoogleDoc(MEMORY_IDS.liveLog);
+  await appendToGoogleDoc(MEMORY_IDS.liveLog, `--- Live Log reset after digest (${week}) ---\n`);
+
+  return week;
+}
+
+async function runQuarterlyArchive() {
+  console.log('  [ARCHIVE] Starting monthly archive...');
+  const drive = getDriveClient();
+  const res = await drive.files.export(
+    { fileId: MEMORY_IDS.weeklyDigest, mimeType: 'text/plain' },
+    { responseType: 'text' }
+  );
+  const digestContent = (res.data || '').trim();
+  if (!digestContent || digestContent.length < 500) {
+    console.log('  [ARCHIVE] Weekly digest too short to archive — skipping');
+    return null;
+  }
+
+  const archiveResponse = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 800,
+    messages: [{
+      role: 'user',
+      content: `You are Jin, Chief of Staff at 88 Venture Studio. Compress these weekly digest entries into a quarterly archive summary. Keep only the most strategically important decisions, financial moves, relationship changes, and infrastructure milestones. Be ruthless — this is long-term memory. Format as flowing prose with a date range header.
+
+Weekly Digests:
+${digestContent.slice(-8000)}`,
+    }],
+  });
+
+  const archive = archiveResponse.content[0].text.trim();
+  const month = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const archiveEntry = `\n\n=== Archive: ${month} ===\n${archive}`;
+
+  await appendToGoogleDoc(MEMORY_IDS.quarterlyArchive, archiveEntry);
+  await clearGoogleDoc(MEMORY_IDS.weeklyDigest);
+  await appendToGoogleDoc(MEMORY_IDS.weeklyDigest, `--- Weekly Digest reset after archive (${month}) ---\n`);
+
+  console.log(`  [ARCHIVE] ✓ Archived to quarterly doc, digest reset`);
+  return month;
 }
 
 function scheduleConsolidation(threadKey) {
@@ -2542,6 +2724,9 @@ async function main() {
   const JOE_DM_CHANNEL = 'D0AG94XK2NS';
   await backfillSlackHistory(process.env.SLACK_BOT_TOKEN, JOE_DM_CHANNEL, 72);
 
+  // Resolve memory file backups on Drive
+  await resolveMemoryBackupFiles();
+
   // Test if Jin's Google delegation is active
   await testJinDelegation();
 
@@ -2692,45 +2877,36 @@ async function main() {
     if (resolvedText === '!digest') {
       await client.chat.postMessage({ channel: message.channel, text: 'On it — reading the live log...' });
       try {
-        const drive = getDriveClient();
-        const res = await drive.files.export(
-          { fileId: MEMORY_IDS.liveLog, mimeType: 'text/plain' },
-          { responseType: 'text' }
-        );
-        const liveLogContent = (res.data || '').trim();
-        if (!liveLogContent) {
+        const week = await runDigest();
+        if (!week) {
           await client.chat.postMessage({ channel: message.channel, text: 'Live log is empty — nothing to digest.' });
           return;
         }
-
-        const digestResponse = await anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 500,
-          messages: [{
-            role: 'user',
-            content: `You are Jin, Chief of Staff to Joe Ko at 88 Venture Studio. Here are recent Live Log entries from conversations with Joe. Write a concise weekly digest entry: the most important decisions made, strategic context shifts, and business insights — especially anything with revenue or margin implications. Compress aggressively. Format as flowing prose with a date header, not bullets.
-
-Live Log:
-${liveLogContent.slice(-6000)}`,
-          }],
-        });
-
-        const digest = digestResponse.content[0].text.trim();
-        const week = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-        const digestEntry = `\n\n=== Week of ${week} ===\n${digest}`;
-        const marker = `\n\n--- DIGESTED ${week} ---\n`;
-
-        await appendToGoogleDoc(MEMORY_IDS.weeklyDigest, digestEntry);
-        await appendToGoogleDoc(MEMORY_IDS.liveLog, marker);
-
         // Reload memory context so next messages use the new digest
         context.memoryContext = await loadMemoryContext();
         context.systemPrompt = buildSystemPrompt(context.driveContext, loadSessionLog(), context.memoryContext, context.memoryFiles);
-
-        await client.chat.postMessage({ channel: message.channel, text: `Done. Weekly digest written to Drive for ${week}.` });
+        await client.chat.postMessage({ channel: message.channel, text: `Done. Weekly digest written and Live Log cleared for ${week}.` });
       } catch (err) {
         console.error('Digest failed:', err.message);
         await client.chat.postMessage({ channel: message.channel, text: `Digest failed: ${err.message}` });
+      }
+      return;
+    }
+
+    if (resolvedText === '!archive') {
+      await client.chat.postMessage({ channel: message.channel, text: 'Running monthly archive...' });
+      try {
+        const month = await runQuarterlyArchive();
+        if (!month) {
+          await client.chat.postMessage({ channel: message.channel, text: 'Weekly digest is too short to archive — skipping.' });
+          return;
+        }
+        context.memoryContext = await loadMemoryContext();
+        context.systemPrompt = buildSystemPrompt(context.driveContext, loadSessionLog(), context.memoryContext, context.memoryFiles);
+        await client.chat.postMessage({ channel: message.channel, text: `Archive complete for ${month}. Weekly digest compressed and moved to quarterly archive.` });
+      } catch (err) {
+        console.error('Archive failed:', err.message);
+        await client.chat.postMessage({ channel: message.channel, text: `Archive failed: ${err.message}` });
       }
       return;
     }
@@ -2861,8 +3037,18 @@ Keep it to 2-4 sentences. Only mention things you actually know about — don't 
   }, { timezone: 'America/Los_Angeles' });
 
   // Weekly digest — Sunday at 9:00 PM PST
-  cron.schedule('0 21 * * 0', () => {
+  cron.schedule('0 21 * * 0', async () => {
     console.log('  [CRON] Weekly digest triggered');
+    try {
+      const week = await runDigest();
+      if (week) {
+        context.memoryContext = await loadMemoryContext();
+        context.systemPrompt = buildSystemPrompt(context.driveContext, loadSessionLog(), context.memoryContext, context.memoryFiles);
+        console.log(`  [CRON] ✓ Digest complete for ${week}`);
+      }
+    } catch (err) {
+      console.warn('  [CRON] Digest failed:', err.message);
+    }
     sendProactiveMessage(
       `It's Sunday evening. Give Joe a brief week-ahead preview as Jin. Include:
 1. Key things that happened this past week (from your memory/Live Log)
@@ -2873,7 +3059,22 @@ Keep it concise — a short paragraph. Think like a real Chief of Staff prepping
     );
   }, { timezone: 'America/Los_Angeles' });
 
-  console.log('  ✓ Scheduled: morning briefing (8:30am), EOD wrap-up (6pm), weekly preview (Sun 9pm) — PST');
+  // Monthly archive — 1st of each month at 10:00 PM PST
+  cron.schedule('0 22 1 * *', async () => {
+    console.log('  [CRON] Monthly archive triggered');
+    try {
+      const month = await runQuarterlyArchive();
+      if (month) {
+        context.memoryContext = await loadMemoryContext();
+        context.systemPrompt = buildSystemPrompt(context.driveContext, loadSessionLog(), context.memoryContext, context.memoryFiles);
+        console.log(`  [CRON] ✓ Archive complete for ${month}`);
+      }
+    } catch (err) {
+      console.warn('  [CRON] Archive failed:', err.message);
+    }
+  }, { timezone: 'America/Los_Angeles' });
+
+  console.log('  ✓ Scheduled: morning briefing (8:30am), EOD wrap-up (6pm), weekly preview (Sun 9pm), monthly archive (1st 10pm) — PST');
 
   // ─── Graceful shutdown ──────────────────────────────────────────────────────
   // Graceful shutdown — properly disconnect so Slack doesn't keep stale connections (Socket Mode)
@@ -2886,6 +3087,7 @@ Keep it concise — a short paragraph. Think like a real Chief of Staff prepping
     }, 8000);
     forceTimer.unref();
     try {
+      await syncMemoryFilesToDrive();
       await app.stop();
       console.log('  ✓ Disconnected from Slack.');
     } catch (e) {

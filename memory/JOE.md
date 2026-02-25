@@ -35,3 +35,12 @@ Design thinker by instinct: user-centered, assumption-testing, sees trends early
 
 - MC = Joe's main computer (MacBook + VS Code Remote SSH)
 - Terminus / Termius = Termius iPhone SSH app (Joe uses these interchangeably)
+
+
+## Updated Feb 24, 2026
+
+## Roster Clarification (Feb 2026)
+
+- Jeffrey (Philippines) handles Walmart and Temu accounts — previously logged as photographer; two different Jeffreys exist on roster (Jeffrey Gilmer = contractor photographer, Jeffrey Philippines = marketplace AM)
+- Sultan confirmed not full-time (removed from assessment cohort)
+- Abdullah confirmed not full-time

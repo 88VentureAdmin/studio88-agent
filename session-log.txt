@@ -372,3 +372,689 @@ TEAM ROSTER UPDATE:
   - Richelle, Sultan, Abdullah, Jessica Vuong, Jessica Ko, Anne (Princess)
   - Eileen (bookkeeper), XOA Tax (CPA), Louisa Zhou (General Counsel)
   Total confirmed: 23+ people across Marketing, Finance/Legal, Logistics, Marketplace, Creative, Warehouse
+
+--- Feb 24, 12:41 AM (Jin saved) ---
+## Self-Improvement Directive — AI Infrastructure Review (Joe's standing order, Feb 24 2026)
+
+Every 3 months, Jin must proactively:
+1. Search the web for developments in AI agent memory systems, tools, orchestration frameworks, and what others are building with AI chiefs of staff / AI agents
+2. Self-evaluate current memory architecture, tools, and capabilities against what's now possible
+3. Either bring recommendations to Joe for approval, OR apply minor self-edits directly (e.g. updating memory files, adding context)
+4. Document what was reviewed and what changed
+
+This exists because AI tech moves fast — what's best practice today may be outdated in 90 days. Joe wants Jin to stay current without being asked.
+
+Next scheduled review: ~May 24, 2026.
+
+--- Feb 24, 2026 (deep consolidation) ---
+Updated memory files: MEMORY.md
+
+--- Feb 24, 8:46 AM (Jin saved) ---
+## Self-Improvement Directive — Quarterly AI Infrastructure Review
+
+Every 3 months, Jin is to proactively search the web to self-evaluate:
+- Current memory architecture and tools
+- Whether better memory systems, agent frameworks, or AI infrastructure exist
+- What others are building and doing differently in the AI agent space
+
+After researching, either:
+1. Bring findings to Joe for approval before applying changes, OR
+2. Apply minor edits directly if clearly beneficial and low-risk
+
+This is a standing directive. First review due: ~May 24, 2026. Repeat every 3 months.
+
+Joe's reasoning: AI tech changes too fast — Jin needs to evolve with it proactively, not wait to be told.
+
+--- Feb 24, 8:52 AM (Jin saved) ---
+## Bonsai Heirloom — Operations Detail (added Feb 24 2026)
+
+**Nursery:** Pescadero, CA — plants grown and shipped from there
+**Nursery Manager / Head of Production:** John Holter — full-time staff (add to team roster as #17)
+**Pots & Accessories:** Produced in China
+
+**Current Marketing Stack:**
+- Shopify site (live)
+- Google Ads (running)
+- Social content posting (Soosk)
+- YouTube — long-form content, 190K subscribers
+- Email marketing (active)
+- Content creation ongoing
+
+**Gaps / Wants:**
+- Meta Ads (not yet running)
+- More UGC
+
+## Team Roster Addition
+| 17 | John Holter | Nursery Manager / Head of Production — Bonsai Heirloom | Pescadero, CA | Full-time |
+
+## Self-Infrastructure Improvement Directive (added Feb 24 2026)
+Every 3 months, Jin should search the web to self-evaluate current memory architecture, tools, and AI infrastructure approaches — looking for better options, new methods, or emerging patterns. Then either bring recommendations to Joe for approval or apply edits directly if minor. This is a standing directive because AI tech changes fast.
+Next quarterly review due: May 24, 2026.
+
+
+--- Feb 24, 8:55 AM ---
+(Memory extraction only — no tools)
+
+---
+
+**EXTRACT FOR LONG-TERM MEMORY:**
+
+1. **Bonsai Heirloom — Business Context Update**
+ - Plants grown and shipped from nursery in Pescadero, CA
+ - John Holter = full-time staff, Nursery Manager / Head of Production
+ - Active channels: Shopify, Google Ads, Soosk, YouTube (190K subs), email marketing, content creation
+ - Pots & accessories sourced from China
+ - Gaps/wants: Meta Ads (not yet running), more UGC
+
+2. **Jin Self-Improvement Directive (Standing Instruction)**
+ - Every 3 months, search web to self-evaluate current memory systems and AI tools
+ - Identify better alternatives; bring to Joe for approval or apply edits directly
+ - Next review due: ~May 24, 2025
+ - Rationale: AI tech changes fast; staying current is part of Jin's operating mandate
+
+3. **J.Adams — Fee Risk Flag**
+ - Amazon introducing Returns Processing Fee for clothing/footwear/accessories
+ - J.Adams runs 35%+ return rate — direct margin hit
+ - Action item: model out exact fee impact using Amazon's footwear return fee schedule
+
+--- Feb 24, 8:57 AM (Jin saved) ---
+## Bonsai Heirloom — Operations Update (Feb 24 2026)
+- Plants grown at nursery in Pescadero, CA — ships direct from there
+- Pots & accessories sourced from China
+- John Holter: Full-time Nursery Manager / Head of Production (Pescadero) — Team member #17
+- Active channels: Shopify, Google Ads, Soosk social posting, YouTube (190K subs — major asset), email marketing
+- Gaps: Meta Ads not yet launched, more UGC wanted
+
+## Sunbay Foods — Operations Update (Feb 24 2026)
+- Product ordered from US supplier → sent to US co-packer → ships to Amazon FBA
+- Amazon MCF fulfills Shopify store orders
+- Shopify site is live
+- Zero advertising — no Google Ads, no Meta, no social content being produced
+- Social accounts exist but dormant
+- Assessment: great potential, nothing activated yet
+
+
+--- Feb 24, 8:59 AM ---
+**Memory extracted — worth saving:**
+
+---
+
+**Sunbay — Current State (as of today)**
+- Product ordered from US supplier → sent to US co-packer → into Amazon FBA
+- Amazon MCF fulfills Shopify store orders
+- Shopify site is live
+- Zero advertising — no Google Ads, no Meta, no social content
+- Social accounts created but dormant
+- Joe's assessment: "great potential but nothing" — brand is infrastructure-ready but unactivated
+- **Priority gap:** needs a demand activation plan (ads, content, or both)
+
+---
+
+**Fee note to revisit:** Low-Price FBA now $0.86 cheaper than standard — if Sunbay's ASP qualifies, worth modeling before any ad spend math.
+
+--- Feb 24, 9:02 AM (Jin saved) ---
+## Bonsai Heirloom — Operational Update (Feb 24 2026)
+- Plants grown at nursery in Pescadero, CA — ships from there
+- Pots & accessories sourced from China
+- John Holter — Full-time Nursery Manager / Head of Production, Pescadero (Team member #17)
+- Active channels: Shopify, Google Ads, Soosk social posting, YouTube (190K subs, long-form content), email marketing
+- Wants: Meta Ads (not yet running), more UGC
+
+## Sunbay Foods — Operational Update (Feb 24 2026)
+- Product ordered from US suppliers, sent to US co-packer
+- From co-packer → Amazon FBA
+- Amazon MCF fulfills Shopify orders
+- Shopify is live but no ads, no traffic, no social content being created
+- Social accounts exist but dormant
+- Summary: infrastructure solid, completely dark on marketing. Great potential, nothing activated.
+
+## Shoes for Dinner (SFD) — Operational Update (Feb 24 2026)
+- Active on: SHEIN, Walmart, Temu, TikTok, Shopify
+- No channel is profitable currently
+- Primary function: liquidation vehicle for J.Adams excess/returned inventory (used as a "mask")
+- Still figuring out path to profitability
+- Goal: grow D2C (Shopify)
+- No ads to Shopify, no consistent traffic, no regular content posting
+- Paid $10K to Morace Media (TikTok agency) with $50K revenue guarantee — not performing
+- Need: content pipeline, more structured approach to growth
+
+## Team Roster Addition
+- #17: John Holter — Nursery Manager / Head of Production, Bonsai Heirloom, Pescadero CA, full-time
+
+
+--- Feb 24, 9:09 AM ---
+**Saving to Memory — SFD + Team**
+
+**SFD Business Context:**
+- Active on SHEIN, Walmart, Temu, TikTok Shop, Shopify — none profitable
+- Currently functioning as a liquidation channel for J.Adams excess inventory
+- Goal: build a selling machine using existing + consignment inventory (no capital investment in new inventory — too high risk at low run quantities)
+- Consignment model is the target vehicle to scale without inventory risk
+- No ads to Shopify, no real traffic, no content pipeline — both bandwidth and direction are blockers
+- Paid $10K to Morace Media (TikTok agency) with a $50K revenue guarantee — not performing. Need to verify guarantee terms and timeline in writing
+
+**SFD Strategy Path:**
+- Prove the machine first with zero-risk inventory → use conversion data to attract consignment vendors → eliminate inventory risk long-term
+- Content pipeline is the core unlock for D2C
+
+**Team — SFD Content:**
+- Steven is stretched across all brands, not available to own SFD content
+- "Kitty" (China-based graphic designer) flagged as potential resource to activate for SFD content — details TBD
+
+**J.Adams:**
+- Priority: grow Shopify, deprioritize Amazon (only Shopify is profitable)
+
+---
+
+Still need: Kitty's full role, capacity, and what she currently produces.
+
+
+--- Feb 24, 9:11 AM ---
+**MEMORY LOG — SFD / Portfolio Session**
+
+**SFD (Surfboard Flea Market)**
+- Strategy: Prove model with zero-risk inventory first (returns + consignment), then buy-in once data supports it
+- Real unlock is content pipeline + D2C traffic, not sourcing
+- Consignment vendors fund inventory risk indefinitely once conversion is proven
+- Blocker: bandwidth AND direction
+- Kitty (China-based graphic designer) flagged as potential resource for content support — details still needed
+
+**J.Adams**
+- Priority: Grow Shopify, move away from Amazon
+- Amazon = managed decline, Shopify = only profitable channel
+
+**Tiya**
+- Currently Amazon-only
+- Inventory imported from China, already stateside
+- Opportunity: D2C expansion
+
+**Boley**
+- Currently Amazon-only
+- D2C possible but depends on partnership structure
+
+**CCS**
+- Currently D2C-only
+- Should add Amazon — niche search intent, B2B buyers, could move fast
+
+**Portfolio-Level Pattern**
+- Most Amazon-only brands need D2C; CCS (D2C-only) needs Amazon
+- Channel expansion opportunity exists across the board — sequencing and bandwidth are the constraints
+
+**Roster Gap**
+- Kitty (China graphic designer) — not previously on file, details TBD
+
+--- Feb 24, 9:11 AM (Jin saved) ---
+## Brand Updates — Feb 24 2026
+
+### Bonsai Heirloom
+- Plants grown at nursery in Pescadero, CA — ships from there
+- Pots & accessories produced in China
+- John Holter — full-time Nursery Manager / Head of Production (Pescadero)
+- Active channels: Shopify, Google Ads, Soosk social posting, YouTube (190K subs), email marketing
+- Wants: Meta Ads (not live yet), more UGC
+
+### Sunbay Foods
+- Product ordered from US suppliers, sent to US co-packer, then to Amazon FBA
+- Amazon MCF fulfills Shopify orders
+- Shopify is live but no ads, no traffic, no content
+- Social accounts created but dormant
+- One profitable SKU (honey sticks), infrastructure ready, nothing activated
+
+### Shoes for Dinner (SFD)
+- Channels: SHEIN, Walmart, Temu, TikTok, Shopify — none profitable
+- Used primarily as liquidation vehicle for J.Adams overstock
+- Goal: build D2C selling machine using existing inventory + consignment vendor shoes (no owned inventory risk)
+- No ads to Shopify, no regular content, no traffic
+- Paid $10K to Morace Media (TikTok agency) — guaranteed $50K revenue, not performing
+- Needs: content pipeline, D2C traffic engine
+- Kathrine (Kitty?) and Steven both stretched — bandwidth + direction both blocking content
+- "Kitty" = China-based graphic designer (not Kathrine Gilmer) — need more details on her role/status
+
+### J.Adams
+- Priority: grow Shopify, move away from Amazon
+- Amazon is managed decline
+
+### TIYA
+- Amazon only
+- Inventory imported from China, warehoused in US
+- D2C opportunity exists
+
+### Boley
+- Amazon only
+- D2C possible but depends on partnership structure with Reuben
+
+### CCS
+- D2C only (Shopify)
+- Should add Amazon — niche B2B buyers with search intent, could move fast
+
+### Portfolio-wide pattern
+- Amazon-only brands (TIYA, Boley) need D2C
+- D2C-only brand (CCS) needs Amazon
+- Channel expansion opportunities across the board — sequencing and bandwidth are the constraints
+
+
+--- Feb 24, 9:17 AM ---
+**Extracted for Long-Term Memory:**
+
+---
+
+**Strategic Shift — Org Structure**
+Joe is open to full restructuring around AI agents. No staff member is safe. Framework: define the AI-native org first, then determine who fits — not the reverse. This is now an active strategic conversation.
+
+**Channel Strategy by Brand (confirmed this session):**
+- **J.Adams** — Shopify only viable channel; managed decline on Amazon
+- **Tiya** — Amazon only; D2C expansion is opportunity; inventory imported from China, in-hand
+- **Boley** — Amazon only; D2C possible but contingent on partnership structure
+- **CCS** — D2C only; adding Amazon is a clear next move (B2B buyer, niche search intent)
+
+**Roster Addition:**
+- **Kitty** — China-based graphic designer; role/hours still unconfirmed, needs follow-up
+
+**Open Thread:**
+- Kitty's full role and contractor vs. full-time status still not captured
+
+---
+
+Nothing saved on AI org structure depth yet — that conversation is pending Joe's answer on gradual vs. hard restructure approach.
+
+
+--- Feb 24, 9:24 AM ---
+**Memory extract — worth saving:**
+
+---
+
+**Strategic posture shift (high importance):**
+Default is now **prune**, not empower. Burden of proof is on the human to justify their seat. Every role is open for replacement by AI agent.
+
+**Timeline:** 12 months for full transition assessment.
+
+**Growth requirement:** Business must scale 4-6x to justify keeping current headcount. This is the filter for every people and AI investment decision.
+
+**Minimum human org defined:**
+- Joe (strategy, capital, relationships)
+- One operator (Tracy is lead candidate)
+- One creative (Steven is lead candidate)
+- Cindy + Jose (warehouse, non-negotiable)
+- Jin
+
+Everyone else is a candidate for elimination over 12 months.
+
+**People assessment plan (approved, not yet executed):**
+- Kolbe A Index (~$55/person) — adaptability and action style
+- CliftonStrengths Top 5 (~$22/person) — natural wiring
+- Custom AI literacy self-assessment (Joe to build or delegate)
+- Total budget: ~$1,200 for 15 people
+- Pair with direct 1:1 conversation about 12-month role evolution
+
+**Roles flagged as highest replacement risk:** Anne (CS), Abdullah (SEO), Sultan (Google Ads), Emma (forecasting)
+
+**Key decision rule:** AI investments must unlock revenue, not just cut cost — but both matter.
+
+
+--- Feb 24, 9:34 AM ---
+**Memory Extract — 88 Venture Studio**
+
+---
+
+**Strategic Decision:**
+Joe has adopted a **prune-first posture** for org restructuring. Default assumption is AI replaces the role. Humans must earn their slot back. Burden of proof is on the person, not the AI.
+
+**Minimum Human Org Defined (AI-native target):**
+Joe + one operator (Tracy leading candidate) + one creative (Steven leading candidate) + two warehouse (Cindy, Jose) + Jin. ~5-6 humans total.
+
+**Assessment Plan Approved:**
+- Kolbe A Index (~$55/person)
+- CliftonStrengths Top 5 (~$22/person)
+- AI literacy self-assessment (Jin to build)
+- Estimated total: ~$1,200 for full team
+- Jin will read all results + cross-reference against minimum org to produce diagnostic recommendation
+
+**Task Open:**
+Build AI literacy self-assessment (10 questions, measures current tool usage and attitude toward AI)
+
+**Roster to Assess (16 confirmed, likely incomplete):**
+Joe Ko, Jessica Ko, Jessica Vuong, Richelle (part-time CRO), Sultan, Abdullah, Anne/Princess, Kathrine Gilmer, Steven Gee, Jeffrey Gilmer (contractor), Tracy Wang, Emma Chang, Cindy, Jose, Joy Zhou, Celeste. Kitty (China graphic designer) still unconfirmed status.
+
+**Open Question:**
+Full headcount not yet confirmed. Joe to provide complete roster before assessments go out.
+
+
+--- Feb 24, 9:38 AM ---
+**SAVE TO MEMORY:**
+
+**Org Assessment Cohort Finalized (9 people)**
+Full-time, computer-based roles only. Warehouse, part-time, and contractor roles excluded.
+
+1. Jessica Ko
+2. Jessica Vuong
+3. Sultan
+4. Anne / Princess
+5. Kathrine Gilmer
+6. Steven Gee
+7. Tracy Wang
+8. Emma Chang
+9. Joy Zhou
+
+**Key decision:** Celeste and Kitty excluded — their retention is contingent on Joy Zhou. If Joy doesn't work out, all three (Joy, Celeste, Kitty) get cut. No point investing in assessments for conditional headcount.
+
+**Abdullah confirmed as part-time** — not on payroll for assessment purposes.
+
+**Next action pending:** Build AI literacy self-assessment to deploy alongside Kolbe A and CliftonStrengths as a three-instrument package for the 9-person cohort.
+
+
+--- Feb 24, 9:44 AM ---
+**Memory Update — 88 Venture Studio**
+
+**Assessment Cohort (Final — 9 people):**
+1. Jessica Ko
+2. Jessica Vuong
+3. Jeffrey (Philippines) — Walmart/Temu account manager
+4. Anne / Princess
+5. Kathrine Gilmer
+6. Steven Gee
+7. Tracy Wang
+8. Emma Chang
+9. Joy Zhou
+
+**Key Decisions:**
+- Abdullah removed — not full time, excluded from assessment
+- Celeste and Kitty removed — fate tied to Joy Zhou; if Joy doesn't work out, both get laid off (marketplace team dependency)
+- Sultan removed, replaced by Jeffrey (Philippines)
+- Kathrine Gilmer kept — Joe wants to understand how she can contribute
+
+**Assessment Budget Approved (pending):**
+- Kolbe A: $495 (9 × $55)
+- CliftonStrengths Top 5: $198 (9 × $22)
+- Total: $693
+- AI literacy assessment: built in-house (free)
+
+**Risk Flag:**
+- Joy Zhou is a critical dependency — Celeste and Kitty's employment contingent on her outcome
+
+--- Feb 24, 2026 (deep consolidation) ---
+Updated memory files: MEMORY.md, JOE.md
+
+--- Feb 24, 2:04 PM (Jin saved) ---
+## Marketplace Team — Full Roster (Updated Feb 24 2026)
+
+**Joy Zhou** — Head of Marketplace. Oversees all accounts: Amazon, Walmart, Temu. 15+ years Amazon experience. Strong logic, understands trends and Amazon algorithm, very proactive, disciplined, stable. Takes instructions well. Limited English speaking but reads and writes well (uses translation). Manages a team of AMs. Has not yet demonstrated high productivity to Joe. Primary account: Sunbay Foods. China, full-time, Tue–Sun, 3PM–11PM PST.
+
+**Celeste** — Amazon AM for J.Adams. Reports to Joy. Handles everything Amazon for J.Adams. A few years apparel experience. Limited English speaking, reads and writes well. China, same hours as Joy.
+
+**Kitty** — Full-time Graphic Designer. Under Joy's team. China, same hours. Primarily uses AI to generate marketplace images. Joe's assessment: not very good.
+
+**Apple** — Part-time Amazon AM for Boley and TIYA. Very experienced ecom manager. Limited English reading/writing but can speak. Same hours as China team. Day-to-day tasks unclear to Joe. Productivity unknown.
+
+**Jeffrey** — Philippines-based ecommerce AM. Manages J.Adams Walmart and SFD Temu. Very good with spreadsheets, flat file uploads, Excel, learning Power BI. Fast responder, driven to learn, takes on challenges. Speaks and reads English well. Affordable. Mon–Fri, 9AM–5PM PST.
+
+## Restructuring Notes (AI-driven headcount reduction)
+- Abdullah (SEO): fully replaceable by AI today
+- Sultan (Google Ads): mostly replaceable, fractional oversight only
+- Anne: repetitive CS volume replaceable by AI
+- Jessica Vuong: role shrinks to 10hrs/week with AI doing research/reporting/briefing
+- Emma Chang: role shrinks significantly if AI connected to inventory data
+- Apple + Celeste: with AI handling monitoring/reporting/analysis, execution folds into one AM role
+- Kitty: AI image generation already her primary tool — role is redundant with AI agent
+- Joy stays: strategy, oversight, marketplace judgment
+- Jeffrey stays: execution, spreadsheets, affordable, driven
+- Target: realistically go from 23 to 16-17 people with same or more output
+
+
+--- Feb 24, 2:05 PM ---
+Saved. Here's what I now have locked in on Joy's team:
+
+---
+
+**Joy Zhou — Head of Marketplace**
+- Oversees Amazon, Walmart, Temu across all accounts
+- 15+ years Amazon experience, strong on algorithm and trends
+- Great logic, takes direction well, proactive, disciplined
+- English: reads well, uses translation to communicate
+- Based in China | Tue–Sun, 3PM–11PM PST
+- Currently hands-on with Sunbay Foods
+- Joe's note: hasn't seen a lot of visible productivity yet
+
+**Celeste — Amazon AM, J.Adams**
+- Reports to Joy
+- Handles full J.Adams Amazon account
+- A few years experience in apparel
+- Same hours and location as Joy
+- English: reads/writes well, doesn't speak
+
+**Kitty — Graphic Designer**
+- Under Joy's team
+- Generates all marketplace images
+- Heavy AI usage, Joe's assessment: not very good
+- Same China hours
+
+**Apple — Part-Time Amazon AM**
+- Manages Boley and TIYA
+- Experienced in ecom
+- Productivity unknown
+- English: speaks but can't read/write well
+- Same China hours
+
+**Jeffrey — Ecom AM, Philippines**
+- Manages J.Adams Walmart + Sunbay Foods Temu
+- Strong with spreadsheets, flat files, Excel, learning Power BI
+- Fast, driven, eager to grow
+- Speaks and reads English well
+- Mon–Fri, 9AM–5PM PST | Affordable
+
+---
+
+Anything to add or correct before we move on?
+
+
+--- Feb 24, 2:10 PM ---
+Smart combination. Here's how they work together:
+
+**influencers.club** — Discovery and email extraction
+- Search by niche, follower count, location
+- Pull verified contact emails
+- Gets us the list and contact info fast
+
+**Apify** — Verification and enrichment
+- Scrape the actual Instagram profile to confirm follower count
+- Pull recent post dates to confirm active within 30 days
+- Grab engagement data (likes/comments) for scoring
+- Fills the gap that influencers.club data might be slightly outdated
+
+**The workflow:**
+1. influencers.club → find 20+ candidates matching our criteria, pull emails
+2. Apify → verify each profile, confirm follower count, activity, engagement
+3. I score each one (1-5) using Step 4 criteria
+4. I draft personalized outreach for top 5
+
+**Cost estimate:**
+- influencers.club — credit-based, probably $20-50 for a test run of 20-30 profiles
+- Apify — pay per run, scraping 20-30 profiles would be a few dollars at most
+
+**Total test cost likely under $100** to run the entire SOP end to end with no manual labor.
+
+Want me to pull up both pricing pages now so we can confirm before committing?
+
+
+--- Feb 24, 2:15 PM ---
+**Memory Log — 88 Venture Studio**
+*Extracted by Jin, Chief of Staff*
+
+---
+
+**Project: J.Adams Influencer Outreach SOP**
+- SOP finalized for finding 20 micro fashion influencers (10K–50K followers) — fully executable by Jin at $0 for demo purposes
+- Five-step process: Search → Qualify → Build Table → Score → Draft Outreach
+- Demo approach confirmed: no paid tools, Jin runs manually using web search + browsing external links
+- Scale path identified if team approves demo: influencers.club Pro ($208/mo) + Apify Starter ($29/mo) = $237/mo for full automation
+- Tools evaluated: influencers.club (recommended), Apify (supplementary), Modash (too expensive at $10K–16K/yr for current stage)
+
+**Decision**
+- No tool spend until demo is reviewed by team
+- Jin to run demo SOP on request — awaiting go-ahead from Joe or Jeffrey
+
+---
+
+Nothing else worth saving from this session.
+
+
+--- Feb 24, 2:26 PM ---
+Got it. Let me set that now.
+
+---
+
+**What's worth saving to memory from this conversation:**
+
+**Jin credentials confirmed:**
+- Email: jin@studio-88.com
+- Password: 3V3NyCyXJ2FYY
+- No 2FA currently
+
+**Infrastructure decision:**
+- Jin has browser access and can log into Google Drive as a real employee would
+- Folder structure being built: "88VS — Active Projects" > "J.Adams — Influencer Outreach"
+- Jin Memory files to be kept separate from project folders
+
+**Active task in progress:**
+- J.Adams influencer outreach project initiated
+- Deliverables: Google Sheet (20 influencers + outreach tracker) + Google Doc (top 5 email drafts)
+- Jess is the stakeholder — folder will be shared with her directly
+- Paid tools approved for this SOP (Apify, influencers.club Pro discussed)
+
+**Relationship context:**
+- Jess = client contact on J.Adams account
+
+---
+
+Logging into Drive now and creating the folder structure. One moment.
+
+
+--- Feb 24, 2:30 PM ---
+**Memory Extract — Jin/88VS**
+
+**Infrastructure decision made:**
+- Long-term plan: Set up dedicated OAuth for `jin@studio-88.com` on Mac Mini (separate token file: `jin-gmail-tokens.json`) so Jin has persistent Google Drive API access independent of Joe's account
+- Interim: Joe to add jin@studio-88.com as editor on existing Studio 88 AI Hub folder
+
+**Credentials to note (handle securely):**
+- `jin@studio-88.com` temp password changed to: `3V3NyCyXJ2FYY` (no 2FA set yet — flag as security gap)
+
+**Active task — incomplete:**
+- OAuth setup for jin@studio-88.com: instructions delivered, not yet executed. Requires Joe to add jin as test user in Google Cloud Console (OAuth consent screen) before flow will work
+
+**Project context:**
+- J.Adams influencer outreach project underway — needs a Google Sheet (20 influencers + outreach tracker) and Doc (top 5 email drafts) built in a dedicated folder, shareable directly with Jess Adams
+- Folder structure proposed: `88VS — Active Projects > J.Adams — Influencer Outreach`
+
+**Security flag:**
+- jin@studio-88.com has no 2FA — recommend enabling once OAuth is configured
+
+
+--- Feb 24, 2:48 PM ---
+Memory extraction — no action needed from you, this is just what I'm logging:
+
+---
+
+**MEMORY SAVED:**
+
+- **jin@studio-88.com** credentials established: `3V3NyCyXJ2FYY` (password updated from temp). OAuth setup for jin not yet complete — instructions given, pending execution of Steps 1-4.
+
+- **J.Adams Shoes Instagram tasks assigned** — two SOPs handed off:
+  1. Like all comments on most recent post
+  2. Find 5 female fashion micro-influencers (10-30K followers), like 5 posts each, leave 1 comment each, log results
+  - Status: **Pending credentials** — J.Adams Instagram login not yet provided.
+
+- **Recurring automation opportunity flagged** — Instagram engagement tasks can be scheduled automatically once credentials are stored on Mac Mini.
+
+---
+
+Nothing executed yet. Waiting on: (1) J.Adams Instagram login, (2) jin OAuth setup completion.
+
+--- Feb 24, 3:12 PM (Jin saved) ---
+Apify API token: [REDACTED] — confirmed working as of Feb 24 2026. Fresh billing cycle, near $0 usage. Use for Instagram scraping (micro-influencer research).
+
+
+--- Feb 24, 3:15 PM ---
+Here's what's worth saving:
+
+---
+
+**J.Adams Shoes — Influencer Outreach Pipeline (Started 2/24/26)**
+
+- **Task initiated:** Find 20 micro fashion influencers (10-50K followers) with public emails for J.Adams Shoes affiliate/outreach
+- **Tools connected:** Apify API live (token stored), Google Drive folder + Sheet created
+- **Sheet:** https://docs.google.com/spreadsheets/d/1914TnR_8z0bFrm4f7P4DNJjXGXnX8NFNvn8C689v-a8/edit
+- **Drive folder:** Inside `1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9` → subfolder: `J.Adams — Influencer Outreach`
+- **Pipeline:** Google search → Apify Instagram scraper → score 1-5 for J.Adams fit → Sheet → outreach email drafts
+- **Status:** In progress — scrape running
+
+**Revenue path:** Influencer affiliate program for J.Adams Shoes. Low-cost acquisition via micro influencer outreach.
+
+
+--- Feb 24, 3:18 PM ---
+**SAVE TO MEMORY:**
+
+**Project: J.Adams Shoes — Influencer Outreach**
+- New active project under 88 Venture Studio for client J.Adams Shoes
+- Goal: micro influencer affiliate outreach (10K–50K followers, female fashion)
+- Deliverable completed: 20 influencers scraped, scored, and tracked in Google Sheet
+
+**Tools & Infrastructure Established:**
+- Apify API connected and operational (token stored)
+- J.Adams influencer tracker Sheet live: https://docs.google.com/spreadsheets/d/1914TnR_8z0bFrm4f7P4DNJjXGXnX8NFNvn8C689v-a8/edit
+- New Drive folder created: "J.Adams — Influencer Outreach" inside folder ID 1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9
+- Apify scrape cost: ~$0.05/run — highly scalable at near-zero cost
+
+**Tasks Completed:**
+- 20 influencers sourced, verified, and scored for J.Adams fit
+- Top 5 identified with public emails, ready for outreach
+- Outreach email drafts pending — not yet written or approved
+
+**Task Pending:**
+- Draft and send 5 personalized outreach emails to top influencers
+- Confirm whether Jess receives sheet access
+
+
+--- Feb 24, 3:21 PM ---
+**J.Adams Shoes — Influencer Outreach Pipeline: Active**
+
+- Task initiated: Find 20 micro fashion influencers (10–50K followers) with public emails for J.Adams affiliate outreach
+- Apify API connected (token live, cost ~$0.05/run); used Instagram Profile Scraper actor
+- Google Sheet created: "J.Adams Influencer Tracker" — 20 influencers loaded, scored 1–5 on style alignment, audience match, content quality, engagement, professionalism
+- Sheet lives in new subfolder "J.Adams — Influencer Outreach" inside Drive folder ID: 1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9
+- Top 5 scored influencers identified with public emails; personalized outreach drafts written
+- Outreach emails saved locally to Mac Mini at /Users/agentserver/jadams-influencer-outreach-emails.txt (pending Google Doc drop — service account can't create Docs, only read/update)
+- Blocker: Google Drive service account cannot create new Docs; needs workaround (user creates blank Doc and shares URL, or email delivery)
+- Next step pending: Joe/Jess to create blank Google Doc in J.Adams folder and share URL so emails can be written in
+
+
+--- Feb 24, 3:25 PM ---
+**Worth saving:**
+
+- **Apify API token stored:** `[REDACTED]` — active, minimal usage as of 2026-02-24
+- **J.Adams influencer pipeline completed:** 20 micro fashion influencers scraped, scored, and logged to Google Sheet. Top 5 have verified public emails. Cost: ~$0.05 via Apify.
+- **Google Sheet (J.Adams Influencer Tracker):** https://docs.google.com/spreadsheets/d/1914TnR_8z0bFrm4f7P4DNJjXGXnX8NFNvn8C689v-a8/edit
+- **Google Doc (Outreach Emails — 5 drafts):** https://docs.google.com/document/d/1j3YeUhGeXlOjOq58j-ZNWrj6-fE74MSzxXdiO_yliNE/edit
+- **Drive folder (J.Adams — Influencer Outreach):** inside https://drive.google.com/drive/folders/1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9
+- **Playbook validated:** Apify → score → Sheet → Doc pipeline works end-to-end. Repeatable for other 88VS portfolio brands.
+- **Next action open:** Share sheet and doc with Jess for review/send approval.
+
+--- Feb 24, 4:03 PM (Jin saved) ---
+## Apify Integration (Added Feb 24 2026)
+- Apify API token: [REDACTED]
+- Used for Instagram profile scraping — Instagram Profile Scraper actor
+- Cost per run: ~$0.05 for 20 profiles
+- Token should be stored in Mac Mini .env as APIFY_API_KEY
+
+## J.Adams Influencer Outreach Project (Feb 24 2026)
+- Google Sheet (Influencer Tracker): https://docs.google.com/spreadsheets/d/1914TnR_8z0bFrm4f7P4DNJjXGXnX8NFNvn8C689v-a8/edit
+- Google Doc (Top 5 outreach emails): https://docs.google.com/document/d/1j3YeUhGeXlOjOq58j-ZNWrj6-fE74MSzxXdiO_yliNE/edit
+- Folder lives inside: https://drive.google.com/drive/folders/1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9
+- 20 influencers scraped, scored, and logged. Top 5 outreach emails drafted and saved to Doc.
+- Jess is the stakeholder — folder to be shared with her
+
+## Instagram SOPs — Pending Credentials
+- Two tasks ready to execute once J.Adams Instagram login is provided:
+  1. Like all comments on most recent post
+  2. Find 5 micro-influencers (10-30K), like 5 posts each, leave 1 comment each, log results
+- Jin can execute both via browser_session tool
+- Flag: run from Mac Mini IP may trigger Instagram suspicious activity — space actions out, vary comments
