@@ -65,6 +65,7 @@ const HEARTBEAT_STALENESS_MS = 30 * 60 * 1000; // 30 minutes — Render only act
 let heartbeatFileId = null; // cached at first check
 
 const GMAIL_TOKENS_PATH = './gmail-tokens.json';
+const JIN_TOKENS_PATH = process.env.JIN_GMAIL_TOKENS || './jin-gmail-tokens.json';
 
 function getOAuthClient() {
   const oauth2Client = new google.auth.OAuth2(
@@ -89,6 +90,32 @@ function getOAuthClient() {
   oauth2Client.on('tokens', (newTokens) => {
     const updated = { ...tokens, ...newTokens };
     fs.writeFileSync(GMAIL_TOKENS_PATH, JSON.stringify(updated, null, 2), 'utf8');
+    tokens = updated;
+  });
+  return oauth2Client;
+}
+
+function getJinOAuthClient() {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+    'http://localhost'
+  );
+  let tokens;
+  try {
+    if (fs.existsSync(JIN_TOKENS_PATH)) {
+      tokens = JSON.parse(fs.readFileSync(JIN_TOKENS_PATH, 'utf8'));
+    } else {
+      throw new Error('Jin tokens file not found');
+    }
+  } catch (err) {
+    console.warn('  ✗ getJinOAuthClient failed:', err.message, '— falling back to Joe OAuth');
+    return getOAuthClient();
+  }
+  oauth2Client.setCredentials(tokens);
+  oauth2Client.on('tokens', (newTokens) => {
+    const updated = { ...tokens, ...newTokens };
+    fs.writeFileSync(JIN_TOKENS_PATH, JSON.stringify(updated, null, 2), 'utf8');
     tokens = updated;
   });
   return oauth2Client;
@@ -132,8 +159,8 @@ let jinDelegationActive = null; // null = untested, true/false = cached result
 function getJinAuth() {
   const key = getServiceAccountKey();
   if (!key || jinDelegationActive === false) {
-    // Delegation not available — fall back to Joe's OAuth
-    return getOAuthClient();
+    // Delegation not available — use Jin's own OAuth tokens
+    return getJinOAuthClient();
   }
   return new google.auth.GoogleAuth({
     credentials: key,
@@ -144,9 +171,10 @@ function getJinAuth() {
 
 // Test delegation on startup and cache result
 async function testJinDelegation() {
+  // First try service account delegation
   try {
     const key = getServiceAccountKey();
-    if (!key) { jinDelegationActive = false; return; }
+    if (!key) throw new Error('no service account key');
     const auth = new google.auth.GoogleAuth({
       credentials: key,
       scopes: ['https://www.googleapis.com/auth/drive.readonly'],
@@ -156,9 +184,20 @@ async function testJinDelegation() {
     await drive.about.get({ fields: 'user' });
     jinDelegationActive = true;
     console.log(`  ✓ Jin delegation active (${JIN_EMAIL})`);
+    return;
   } catch {
     jinDelegationActive = false;
-    console.log(`  ⚠ Jin delegation not yet active — using Joe's OAuth as fallback`);
+  }
+
+  // Delegation failed — test Jin's own OAuth tokens
+  try {
+    const jinAuth = getJinOAuthClient();
+    const drive = google.drive({ version: 'v3', auth: jinAuth });
+    const about = await drive.about.get({ fields: 'user' });
+    const email = about.data.user?.emailAddress || 'unknown';
+    console.log(`  ✓ Jin OAuth active (${email})`);
+  } catch (err) {
+    console.log(`  ⚠ Jin auth failed: ${err.message} — falling back to Joe's OAuth`);
   }
 }
 
@@ -180,7 +219,7 @@ function getDriveClient() {
 }
 
 function getJinDriveClient() {
-  return google.drive({ version: 'v3', auth: getJinAuth() });
+  return google.drive({ version: 'v3', auth: getJinOAuthClient() });
 }
 
 async function appendToGoogleDoc(docId, text) {
@@ -661,22 +700,27 @@ const TOOLS = [
   },
   {
     name: 'create_drive_file',
-    description: 'Create a new file in the Studio 88 AI Hub folder on Google Drive.',
+    description: 'Create a new file, Google Doc, Google Sheet, or folder in Google Drive. Created as Jin.',
     input_schema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'File name (include extension, e.g. "Q1 Plan.txt")' },
-        content: { type: 'string', description: 'File content' },
+        name: { type: 'string', description: 'File name (e.g. "Q1 Plan" for a Doc, "Budget" for a Sheet, "Projects" for a folder)' },
+        content: { type: 'string', description: 'Initial content (optional — for text files and Google Docs)' },
+        type: { type: 'string', enum: ['text', 'document', 'spreadsheet', 'folder'], description: 'File type: text (plain text), document (Google Doc), spreadsheet (Google Sheet), folder. Default: text.' },
+        folder_id: { type: 'string', description: 'Parent folder ID (default: AI Hub folder)' },
       },
-      required: ['name', 'content'],
+      required: ['name'],
     },
   },
   {
     name: 'list_drive_files',
-    description: 'List files in the Studio 88 AI Hub folder on Google Drive.',
+    description: 'List files in any Google Drive folder. Defaults to the AI Hub folder.',
     input_schema: {
       type: 'object',
-      properties: {},
+      properties: {
+        folder_id: { type: 'string', description: 'Folder ID to list (default: AI Hub folder)' },
+        query: { type: 'string', description: 'Optional search filter (e.g. "name contains \'report\'" or "mimeType=\'application/vnd.google-apps.folder\'")' },
+      },
     },
   },
   {
@@ -692,7 +736,7 @@ const TOOLS = [
   },
   {
     name: 'send_email',
-    description: 'Send an email via Gmail on behalf of Joe.',
+    description: 'Send an email via Jin\'s Gmail (jin@studio-88.com).',
     input_schema: {
       type: 'object',
       properties: {
@@ -706,7 +750,7 @@ const TOOLS = [
   },
   {
     name: 'get_calendar_events',
-    description: 'Get upcoming events from Google Calendar.',
+    description: 'Get upcoming events from Jin\'s Google Calendar.',
     input_schema: {
       type: 'object',
       properties: {
@@ -717,7 +761,7 @@ const TOOLS = [
   },
   {
     name: 'create_calendar_event',
-    description: 'Create a new event on Joe\'s Google Calendar.',
+    description: 'Create a new event on Jin\'s Google Calendar. Sends invites to attendees automatically.',
     input_schema: {
       type: 'object',
       properties: {
@@ -872,6 +916,44 @@ const TOOLS = [
         mode: { type: 'string', description: '"replace" to overwrite, "append" to add to the end (default: "replace")' },
       },
       required: ['file_id', 'content'],
+    },
+  },
+  {
+    name: 'move_drive_file',
+    description: 'Move a file or folder to a different location in Google Drive.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'File or folder ID to move' },
+        destination_folder_id: { type: 'string', description: 'Destination folder ID' },
+      },
+      required: ['file_id', 'destination_folder_id'],
+    },
+  },
+  {
+    name: 'rename_drive_file',
+    description: 'Rename a file or folder in Google Drive.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'File or folder ID to rename' },
+        new_name: { type: 'string', description: 'New name for the file or folder' },
+      },
+      required: ['file_id', 'new_name'],
+    },
+  },
+  {
+    name: 'share_drive_file',
+    description: 'Share a Google Drive file or folder with specific people or via link. Returns the sharing link.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'File or folder ID to share' },
+        email: { type: 'string', description: 'Email address to share with (omit for link sharing only)' },
+        role: { type: 'string', enum: ['reader', 'writer', 'commenter'], description: 'Permission role (default: reader)' },
+        anyone_with_link: { type: 'boolean', description: 'If true, anyone with the link can access (default false)' },
+      },
+      required: ['file_id'],
     },
   },
   {
@@ -1123,27 +1205,48 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
         return 'Saved to memory.';
       }
       case 'create_drive_file': {
-        const drive = getDriveClient();
-        const file = await drive.files.create({
+        const drive = getJinDriveClient();
+        const parentId = input.folder_id || AI_HUB_FOLDER_ID;
+        const fileType = input.type || 'text';
+        const mimeTypes = {
+          text: 'text/plain',
+          document: 'application/vnd.google-apps.document',
+          spreadsheet: 'application/vnd.google-apps.spreadsheet',
+          folder: 'application/vnd.google-apps.folder',
+        };
+        const params = {
           requestBody: {
             name: input.name,
-            parents: [AI_HUB_FOLDER_ID],
-            mimeType: 'text/plain',
+            parents: [parentId],
+            mimeType: mimeTypes[fileType] || 'text/plain',
           },
-          media: { mimeType: 'text/plain', body: input.content },
-          fields: 'id,name,webViewLink',
-        });
-        return `Created: ${file.data.name}\nID: ${file.data.id}\nLink: ${file.data.webViewLink}`;
+          fields: 'id,name,webViewLink,mimeType',
+        };
+        if (input.content && (fileType === 'text' || fileType === 'document')) {
+          params.media = { mimeType: 'text/plain', body: input.content };
+        }
+        const file = await drive.files.create(params);
+        let response = `Created: ${file.data.name}\nType: ${fileType}\nID: ${file.data.id}`;
+        if (file.data.webViewLink) response += `\nLink: ${file.data.webViewLink}`;
+        return response;
       }
       case 'list_drive_files': {
-        const drive = getDriveClient();
+        const drive = getJinDriveClient();
+        const folderId = input.folder_id || AI_HUB_FOLDER_ID;
+        let q = `'${folderId}' in parents and trashed=false`;
+        if (input.query) q += ` and ${input.query}`;
         const res = await drive.files.list({
-          q: `'${AI_HUB_FOLDER_ID}' in parents and trashed=false`,
-          fields: 'files(id,name,mimeType,modifiedTime)',
+          q,
+          fields: 'files(id,name,mimeType,modifiedTime,webViewLink)',
           orderBy: 'modifiedTime desc',
+          pageSize: 50,
         });
         const files = res.data.files || [];
-        return files.map(f => `${f.name} (${f.id})`).join('\n') || '(empty)';
+        if (files.length === 0) return '(folder is empty)';
+        return files.map(f => {
+          const icon = f.mimeType.includes('folder') ? '📁' : f.mimeType.includes('spreadsheet') ? '📊' : f.mimeType.includes('document') ? '📝' : '📄';
+          return `${icon} ${f.name} (${f.id})`;
+        }).join('\n');
       }
       case 'read_gmail': {
         const auth = getJinAuth();
@@ -1211,11 +1314,13 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
         };
         if (input.description) event.description = input.description;
         if (input.attendees) event.attendees = input.attendees.split(',').map(e => ({ email: e.trim() }));
-        const res = await calendar.events.insert({ calendarId: 'primary', requestBody: event });
-        return `Event created: ${res.data.summary}\nLink: ${res.data.htmlLink}`;
+        const res = await calendar.events.insert({ calendarId: 'primary', requestBody: event, sendUpdates: 'all' });
+        let result = `Event created: ${res.data.summary}\nLink: ${res.data.htmlLink}`;
+        if (input.attendees) result += `\nInvites sent to: ${input.attendees}`;
+        return result;
       }
       case 'read_sheet': {
-        const auth = getOAuthClient();
+        const auth = getJinOAuthClient();
         // Extract file ID from URL if needed
         const idMatch = input.url_or_id.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) ||
                         input.url_or_id.match(/^([a-zA-Z0-9_-]{25,})$/);
@@ -1454,6 +1559,50 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
           });
           return `File updated (${input.content.length} chars).`;
         }
+      }
+      case 'move_drive_file': {
+        const drive = getJinDriveClient();
+        const file = await drive.files.get({ fileId: input.file_id, fields: 'parents,name' });
+        const previousParents = (file.data.parents || []).join(',');
+        const res = await drive.files.update({
+          fileId: input.file_id,
+          addParents: input.destination_folder_id,
+          removeParents: previousParents,
+          fields: 'id,name,parents',
+        });
+        return `Moved "${res.data.name}" to folder ${input.destination_folder_id}`;
+      }
+      case 'rename_drive_file': {
+        const drive = getJinDriveClient();
+        const res = await drive.files.update({
+          fileId: input.file_id,
+          requestBody: { name: input.new_name },
+          fields: 'id,name',
+        });
+        return `Renamed to "${res.data.name}"`;
+      }
+      case 'share_drive_file': {
+        const drive = getJinDriveClient();
+        const role = input.role || 'reader';
+        const results = [];
+        if (input.email) {
+          await drive.permissions.create({
+            fileId: input.file_id,
+            requestBody: { type: 'user', role, emailAddress: input.email },
+            sendNotificationEmail: true,
+          });
+          results.push(`Shared with ${input.email} as ${role}`);
+        }
+        if (input.anyone_with_link) {
+          await drive.permissions.create({
+            fileId: input.file_id,
+            requestBody: { type: 'anyone', role },
+          });
+          results.push(`Link sharing enabled (${role})`);
+        }
+        const fileInfo = await drive.files.get({ fileId: input.file_id, fields: 'webViewLink,name' });
+        results.push(`Link: ${fileInfo.data.webViewLink}`);
+        return results.join('\n');
       }
       case 'reply_email': {
         const auth = getJinAuth();
