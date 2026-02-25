@@ -222,6 +222,167 @@ function getJinDriveClient() {
   return google.drive({ version: 'v3', auth: getJinOAuthClient() });
 }
 
+// ─── QuickBooks Online API ───────────────────────────────────────────────────
+
+const QBO_TOKENS_PATH = './qbo-tokens.json';
+
+function loadQBOTokens() {
+  try { return JSON.parse(fs.readFileSync(QBO_TOKENS_PATH, 'utf8')); } catch { return {}; }
+}
+
+function saveQBOTokens(allTokens) {
+  fs.writeFileSync(QBO_TOKENS_PATH, JSON.stringify(allTokens, null, 2), 'utf8');
+}
+
+// Resolve a company name to a realmId (fuzzy match)
+function resolveRealm(companyHint) {
+  const allTokens = loadQBOTokens();
+  const realms = Object.keys(allTokens);
+  if (realms.length === 0) return null;
+  if (!companyHint) return realms[0]; // default to first
+  // Check if it's already a realmId
+  if (allTokens[companyHint]) return companyHint;
+  // Try cached company names
+  const hint = companyHint.toLowerCase();
+  for (const r of realms) {
+    const name = (allTokens[r].companyName || '').toLowerCase();
+    if (name.includes(hint) || hint.includes(name)) return r;
+  }
+  return realms[0]; // fallback to first
+}
+
+// Refresh QBO access token if needed
+async function refreshQBOToken(realmId) {
+  const allTokens = loadQBOTokens();
+  const t = allTokens[realmId];
+  if (!t || !t.refresh_token) throw new Error(`No QBO tokens for realm ${realmId}`);
+
+  const basicAuth = Buffer.from(`${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`).toString('base64');
+  const postData = `grant_type=refresh_token&refresh_token=${encodeURIComponent(t.refresh_token)}`;
+
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    const req = https.request({
+      hostname: 'oauth.platform.intuit.com',
+      path: '/oauth2/v1/tokens/bearer',
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    }, (res) => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => {
+        try {
+          const newTokens = JSON.parse(body);
+          if (newTokens.error) return reject(new Error(newTokens.error));
+          allTokens[realmId] = { ...allTokens[realmId], ...newTokens, refreshed_at: new Date().toISOString() };
+          saveQBOTokens(allTokens);
+          resolve(allTokens[realmId]);
+        } catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.write(postData);
+    req.end();
+  });
+}
+
+// Make a QBO API call with automatic token refresh
+async function qboRequest(realmId, path, method = 'GET') {
+  const allTokens = loadQBOTokens();
+  let t = allTokens[realmId];
+  if (!t) throw new Error(`No QBO tokens for realm ${realmId}`);
+
+  const doRequest = (accessToken) => new Promise((resolve, reject) => {
+    const https = require('https');
+    const req = https.request({
+      hostname: 'quickbooks.api.intuit.com',
+      path: `/v3/company/${realmId}${path}`,
+      method,
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' },
+    }, (res) => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => resolve({ statusCode: res.statusCode, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+
+  let result = await doRequest(t.access_token);
+  // If 401, refresh and retry once
+  if (result.statusCode === 401) {
+    t = await refreshQBOToken(realmId);
+    result = await doRequest(t.access_token);
+  }
+  const data = JSON.parse(result.body);
+  if (data.Fault) throw new Error(data.Fault.Error?.map(e => e.Detail || e.Message).join('; ') || 'QBO API error');
+  return data;
+}
+
+// QBO query helper (SELECT ... FROM ...)
+async function qboQuery(realmId, query) {
+  return qboRequest(realmId, `/query?query=${encodeURIComponent(query)}`);
+}
+
+// QBO report helper
+async function qboReport(realmId, reportName, params = {}) {
+  const qs = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+  return qboRequest(realmId, `/reports/${reportName}${qs ? '?' + qs : ''}`);
+}
+
+// Format a QBO report into readable text
+function formatQBOReport(report) {
+  const header = report.Header;
+  const lines = [`${header.ReportName} — ${header.ReportBasis || ''}`];
+  if (header.StartPeriod) lines.push(`Period: ${header.StartPeriod} to ${header.EndPeriod}`);
+  if (header.DateMacro) lines.push(`Date: ${header.DateMacro}`);
+  lines.push('');
+
+  const cols = (report.Columns?.Column || []).map(c => c.ColTitle || '');
+
+  function walkRows(rows, indent = 0) {
+    for (const row of rows) {
+      if (row.Header?.ColData) {
+        const vals = row.Header.ColData.map(c => c.value || '');
+        lines.push('  '.repeat(indent) + vals.filter(Boolean).join('  '));
+      }
+      if (row.ColData) {
+        const vals = row.ColData.map(c => c.value || '');
+        lines.push('  '.repeat(indent) + vals.filter(Boolean).join('  '));
+      }
+      if (row.Rows?.Row) walkRows(row.Rows.Row, indent + 1);
+      if (row.Summary?.ColData) {
+        const vals = row.Summary.ColData.map(c => c.value || '');
+        lines.push('  '.repeat(indent) + vals.filter(Boolean).join('  '));
+        lines.push('');
+      }
+    }
+  }
+
+  if (report.Rows?.Row) walkRows(report.Rows.Row);
+  return lines.join('\n');
+}
+
+// Cache company names on first lookup
+async function cacheCompanyNames() {
+  const allTokens = loadQBOTokens();
+  for (const realm of Object.keys(allTokens)) {
+    if (allTokens[realm].companyName) continue;
+    try {
+      const data = await qboRequest(realm, `/companyinfo/${realm}`);
+      if (data.CompanyInfo) {
+        allTokens[realm].companyName = data.CompanyInfo.CompanyName;
+        saveQBOTokens(allTokens);
+      }
+    } catch {}
+  }
+}
+
 async function appendToGoogleDoc(docId, text) {
   try {
     const auth = getGoogleAuthClient();
@@ -956,6 +1117,119 @@ const TOOLS = [
       required: ['file_id'],
     },
   },
+  // ─── QuickBooks Online Tools ──────────────────────────────────────────────
+  {
+    name: 'qbo_companies',
+    description: 'List all connected QuickBooks Online companies with their names and realm IDs.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'qbo_profit_loss',
+    description: 'Get a Profit & Loss (income statement) report from QuickBooks. Shows revenue, expenses, and net income.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId (e.g. "88 Venture", "Sun Bay", "Bonsai"). Defaults to first connected company.' },
+        start_date: { type: 'string', description: 'Start date YYYY-MM-DD (default: start of current month)' },
+        end_date: { type: 'string', description: 'End date YYYY-MM-DD (default: today)' },
+        summarize_by: { type: 'string', description: 'Summarize by: Total, Month, Week, Days, Quarter, Year (default: Total)' },
+      },
+    },
+  },
+  {
+    name: 'qbo_balance_sheet',
+    description: 'Get a Balance Sheet report from QuickBooks. Shows assets, liabilities, and equity.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId' },
+        date: { type: 'string', description: 'As-of date YYYY-MM-DD (default: today)' },
+      },
+    },
+  },
+  {
+    name: 'qbo_cashflow',
+    description: 'Get a Cash Flow statement from QuickBooks.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId' },
+        start_date: { type: 'string', description: 'Start date YYYY-MM-DD (default: start of current month)' },
+        end_date: { type: 'string', description: 'End date YYYY-MM-DD (default: today)' },
+      },
+    },
+  },
+  {
+    name: 'qbo_invoices',
+    description: 'List invoices from QuickBooks. Filter by status (open, overdue, paid) or customer.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId' },
+        status: { type: 'string', enum: ['open', 'overdue', 'paid', 'all'], description: 'Filter by status (default: open)' },
+        customer: { type: 'string', description: 'Filter by customer name (optional)' },
+        limit: { type: 'number', description: 'Max results (default 20)' },
+      },
+    },
+  },
+  {
+    name: 'qbo_bills',
+    description: 'List bills (accounts payable) from QuickBooks. See what the company owes.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId' },
+        status: { type: 'string', enum: ['unpaid', 'paid', 'overdue', 'all'], description: 'Filter by status (default: unpaid)' },
+        limit: { type: 'number', description: 'Max results (default 20)' },
+      },
+    },
+  },
+  {
+    name: 'qbo_accounts',
+    description: 'List chart of accounts from QuickBooks with current balances.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId' },
+        type: { type: 'string', description: 'Filter by account type: Bank, CreditCard, Income, Expense, etc. (optional)' },
+      },
+    },
+  },
+  {
+    name: 'qbo_transactions',
+    description: 'Search recent transactions across all types (invoices, bills, payments, deposits, etc.).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId' },
+        start_date: { type: 'string', description: 'Start date YYYY-MM-DD (default: 30 days ago)' },
+        end_date: { type: 'string', description: 'End date YYYY-MM-DD (default: today)' },
+        entity: { type: 'string', description: 'Entity type to query: Invoice, Bill, Payment, Deposit, Purchase, JournalEntry, SalesReceipt, Transfer (default: all recent)' },
+        limit: { type: 'number', description: 'Max results (default 25)' },
+      },
+    },
+  },
+  {
+    name: 'qbo_customers',
+    description: 'List customers from QuickBooks with contact info and balances.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId' },
+      },
+    },
+  },
+  {
+    name: 'qbo_vendors',
+    description: 'List vendors from QuickBooks with contact info and balances.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company name or realmId' },
+      },
+    },
+  },
+  // ─── End QBO Tools ──────────────────────────────────────────────────────────
   {
     name: 'reply_email',
     description: 'Reply to an existing email thread in Gmail. Keeps the conversation threaded properly.',
@@ -1604,6 +1878,201 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
         results.push(`Link: ${fileInfo.data.webViewLink}`);
         return results.join('\n');
       }
+      // ─── QBO Tool Implementations ─────────────────────────────────────────────
+      case 'qbo_companies': {
+        const allTokens = loadQBOTokens();
+        const realms = Object.keys(allTokens);
+        if (realms.length === 0) return 'No QBO companies connected. Use /qbo/connect to add one.';
+        const lines = [];
+        for (const realm of realms) {
+          const t = allTokens[realm];
+          let name = t.companyName;
+          if (!name) {
+            try {
+              const data = await qboRequest(realm, `/companyinfo/${realm}`);
+              name = data.CompanyInfo?.CompanyName || 'Unknown';
+              allTokens[realm].companyName = name;
+              saveQBOTokens(allTokens);
+            } catch { name = '(could not fetch)'; }
+          }
+          lines.push(`${name} — realmId: ${realm}`);
+        }
+        return lines.join('\n');
+      }
+      case 'qbo_profit_loss': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        const today = new Date().toISOString().slice(0, 10);
+        const monthStart = today.slice(0, 8) + '01';
+        const params = {
+          start_date: input.start_date || monthStart,
+          end_date: input.end_date || today,
+        };
+        if (input.summarize_by) params.summarize_by = input.summarize_by;
+        const report = await qboReport(realm, 'ProfitAndLoss', params);
+        return formatQBOReport(report);
+      }
+      case 'qbo_balance_sheet': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        const params = {};
+        if (input.date) params.date = input.date;
+        const report = await qboReport(realm, 'BalanceSheet', params);
+        return formatQBOReport(report);
+      }
+      case 'qbo_cashflow': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        const today = new Date().toISOString().slice(0, 10);
+        const monthStart = today.slice(0, 8) + '01';
+        const params = {
+          start_date: input.start_date || monthStart,
+          end_date: input.end_date || today,
+        };
+        const report = await qboReport(realm, 'CashFlow', params);
+        return formatQBOReport(report);
+      }
+      case 'qbo_invoices': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        const limit = input.limit || 20;
+        let where = '';
+        const status = input.status || 'open';
+        const today = new Date().toISOString().slice(0, 10);
+        if (status === 'open') where = "Balance > '0'";
+        else if (status === 'overdue') where = `Balance > '0' AND DueDate < '${today}'`;
+        else if (status === 'paid') where = "Balance = '0'";
+        if (input.customer) {
+          const custFilter = `CustomerRef.name LIKE '%${input.customer.replace(/'/g, "\\'")}%'`;
+          where = where ? `${where} AND ${custFilter}` : custFilter;
+        }
+        const query = `SELECT * FROM Invoice${where ? ' WHERE ' + where : ''} ORDERBY MetaData.CreateTime DESC MAXRESULTS ${limit}`;
+        const data = await qboQuery(realm, query);
+        const invoices = data.QueryResponse?.Invoice || [];
+        if (invoices.length === 0) return `No ${status} invoices found.`;
+        return invoices.map(inv => {
+          const due = inv.DueDate || '—';
+          const bal = inv.Balance ?? 0;
+          const total = inv.TotalAmt ?? 0;
+          const cust = inv.CustomerRef?.name || 'Unknown';
+          const overdue = bal > 0 && new Date(due) < new Date() ? ' ⚠ OVERDUE' : '';
+          return `#${inv.DocNumber || inv.Id} — ${cust}\n  Total: $${total.toFixed(2)} | Balance: $${bal.toFixed(2)} | Due: ${due}${overdue}`;
+        }).join('\n\n');
+      }
+      case 'qbo_bills': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        const limit = input.limit || 20;
+        let where = '';
+        const status = input.status || 'unpaid';
+        const today = new Date().toISOString().slice(0, 10);
+        if (status === 'unpaid') where = "Balance > '0'";
+        else if (status === 'overdue') where = `Balance > '0' AND DueDate < '${today}'`;
+        else if (status === 'paid') where = "Balance = '0'";
+        const query = `SELECT * FROM Bill${where ? ' WHERE ' + where : ''} ORDERBY MetaData.CreateTime DESC MAXRESULTS ${limit}`;
+        const data = await qboQuery(realm, query);
+        const bills = data.QueryResponse?.Bill || [];
+        if (bills.length === 0) return `No ${status} bills found.`;
+        return bills.map(bill => {
+          const due = bill.DueDate || '—';
+          const bal = bill.Balance ?? 0;
+          const total = bill.TotalAmt ?? 0;
+          const vendor = bill.VendorRef?.name || 'Unknown';
+          const overdue = bal > 0 && new Date(due) < new Date() ? ' ⚠ OVERDUE' : '';
+          return `${vendor}\n  Total: $${total.toFixed(2)} | Balance: $${bal.toFixed(2)} | Due: ${due}${overdue}`;
+        }).join('\n\n');
+      }
+      case 'qbo_accounts': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        let where = "Active = true";
+        if (input.type) where += ` AND AccountType = '${input.type}'`;
+        const query = `SELECT * FROM Account WHERE ${where} ORDERBY AccountType, Name MAXRESULTS 100`;
+        const data = await qboQuery(realm, query);
+        const accounts = data.QueryResponse?.Account || [];
+        if (accounts.length === 0) return 'No accounts found.';
+        let currentType = '';
+        const lines = [];
+        for (const acct of accounts) {
+          if (acct.AccountType !== currentType) {
+            currentType = acct.AccountType;
+            lines.push(`\n── ${currentType} ──`);
+          }
+          const bal = acct.CurrentBalance != null ? `$${acct.CurrentBalance.toFixed(2)}` : '—';
+          lines.push(`  ${acct.Name}: ${bal}`);
+        }
+        return lines.join('\n');
+      }
+      case 'qbo_transactions': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        const limit = input.limit || 25;
+        const today = new Date().toISOString().slice(0, 10);
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+        const startDate = input.start_date || thirtyDaysAgo;
+        const endDate = input.end_date || today;
+
+        if (input.entity) {
+          const query = `SELECT * FROM ${input.entity} WHERE MetaData.CreateTime >= '${startDate}' AND MetaData.CreateTime <= '${endDate}T23:59:59' ORDERBY MetaData.CreateTime DESC MAXRESULTS ${limit}`;
+          const data = await qboQuery(realm, query);
+          const items = data.QueryResponse?.[input.entity] || [];
+          if (items.length === 0) return `No ${input.entity} transactions found in range.`;
+          return items.map(item => {
+            const date = item.TxnDate || item.MetaData?.CreateTime?.slice(0, 10) || '—';
+            const total = item.TotalAmt ?? item.Amount ?? 0;
+            const ref = item.DocNumber || item.Id;
+            const name = item.CustomerRef?.name || item.VendorRef?.name || item.EntityRef?.name || '';
+            return `${date} | ${input.entity} #${ref} | ${name} | $${Number(total).toFixed(2)}`;
+          }).join('\n');
+        }
+
+        // Default: query multiple types for a summary
+        const types = ['Invoice', 'Bill', 'Payment', 'Deposit', 'Purchase', 'SalesReceipt'];
+        const allResults = [];
+        for (const type of types) {
+          try {
+            const query = `SELECT * FROM ${type} WHERE MetaData.CreateTime >= '${startDate}' AND MetaData.CreateTime <= '${endDate}T23:59:59' ORDERBY MetaData.CreateTime DESC MAXRESULTS 10`;
+            const data = await qboQuery(realm, query);
+            const items = data.QueryResponse?.[type] || [];
+            for (const item of items) {
+              const date = item.TxnDate || item.MetaData?.CreateTime?.slice(0, 10) || '—';
+              const total = item.TotalAmt ?? item.Amount ?? 0;
+              const name = item.CustomerRef?.name || item.VendorRef?.name || item.EntityRef?.name || '';
+              allResults.push({ date, type, total: Number(total), name, ref: item.DocNumber || item.Id });
+            }
+          } catch {}
+        }
+        allResults.sort((a, b) => b.date.localeCompare(a.date));
+        if (allResults.length === 0) return 'No transactions found in the last 30 days.';
+        return allResults.slice(0, limit).map(t =>
+          `${t.date} | ${t.type} | ${t.name || '—'} | $${t.total.toFixed(2)}`
+        ).join('\n');
+      }
+      case 'qbo_customers': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        const data = await qboQuery(realm, "SELECT * FROM Customer WHERE Active = true ORDERBY DisplayName MAXRESULTS 100");
+        const customers = data.QueryResponse?.Customer || [];
+        if (customers.length === 0) return 'No customers found.';
+        return customers.map(c => {
+          const bal = c.Balance != null ? `$${c.Balance.toFixed(2)}` : '—';
+          const email = c.PrimaryEmailAddr?.Address || '';
+          return `${c.DisplayName} — Balance: ${bal}${email ? ` | ${email}` : ''}`;
+        }).join('\n');
+      }
+      case 'qbo_vendors': {
+        const realm = resolveRealm(input.company);
+        if (!realm) return 'No QBO companies connected.';
+        const data = await qboQuery(realm, "SELECT * FROM Vendor WHERE Active = true ORDERBY DisplayName MAXRESULTS 100");
+        const vendors = data.QueryResponse?.Vendor || [];
+        if (vendors.length === 0) return 'No vendors found.';
+        return vendors.map(v => {
+          const bal = v.Balance != null ? `$${v.Balance.toFixed(2)}` : '—';
+          const email = v.PrimaryEmailAddr?.Address || '';
+          return `${v.DisplayName} — Balance: ${bal}${email ? ` | ${email}` : ''}`;
+        }).join('\n');
+      }
+      // ─── End QBO Implementations ──────────────────────────────────────────────
       case 'reply_email': {
         const auth = getJinAuth();
         const gmail = google.gmail({ version: 'v1', auth });
@@ -2879,6 +3348,14 @@ async function main() {
   // Test if Jin's Google delegation is active
   await testJinDelegation();
 
+  // Cache QBO company names
+  try {
+    await cacheCompanyNames();
+    const qboTokens = loadQBOTokens();
+    const qboCompanies = Object.values(qboTokens).map(t => t.companyName).filter(Boolean);
+    if (qboCompanies.length > 0) console.log(`  ✓ QBO connected: ${qboCompanies.join(', ')}`);
+  } catch {}
+
   let driveContext = '';
   try {
     driveContext = await loadDriveContext();
@@ -2919,6 +3396,91 @@ async function main() {
         console.log(`  [HTTP] ${req.method} ${req.url} sig=present ts=${req.headers['x-slack-request-timestamp']} ip=${req.headers['x-forwarded-for'] || 'local'}`);
       }
       next();
+    });
+    // Legal pages (for Intuit/QBO app compliance)
+    receiver.router.get('/privacy', (req, res) => {
+      res.sendFile(require('path').join(__dirname, 'public', 'privacy.html'));
+    });
+    receiver.router.get('/terms', (req, res) => {
+      res.sendFile(require('path').join(__dirname, 'public', 'terms.html'));
+    });
+    // QBO connect page — one-click auth for any company
+    receiver.router.get('/qbo/connect', (req, res) => {
+      const authUrl = `https://appcenter.intuit.com/connect/oauth2?client_id=${process.env.QBO_CLIENT_ID}&redirect_uri=${encodeURIComponent('https://agents-mac-mini.tail8173ed.ts.net/qbo/callback')}&response_type=code&scope=${encodeURIComponent('com.intuit.quickbooks.accounting')}&state=studio88`;
+      // Show connected companies before redirecting
+      let connected = [];
+      try {
+        const allTokens = JSON.parse(fs.readFileSync('./qbo-tokens.json', 'utf8'));
+        connected = Object.keys(allTokens);
+      } catch {}
+      if (req.query.go === '1') {
+        return res.redirect(authUrl);
+      }
+      res.send(`<!DOCTYPE html><html><head><title>QBO Connect — Jin</title>
+<style>body{font-family:-apple-system,sans-serif;max-width:600px;margin:60px auto;padding:0 20px;color:#333}
+a.btn{display:inline-block;background:#2CA01C;color:#fff;padding:12px 32px;border-radius:6px;text-decoration:none;font-size:1.1em;margin:20px 0}
+a.btn:hover{background:#248a17}.connected{background:#f5f5f5;padding:12px 16px;border-radius:6px;margin:10px 0}</style></head>
+<body><h1>Connect a QuickBooks Company</h1>
+${connected.length ? `<p><b>${connected.length} company(s) already connected:</b></p>${connected.map(r => `<div class="connected">RealmId: ${r}</div>`).join('')}` : ''}
+<p>Click below to authorize another QuickBooks company. You'll be redirected to Intuit to sign in and pick a company.</p>
+<a class="btn" href="/qbo/connect?go=1">Connect QuickBooks Company</a>
+<p style="color:#888;font-size:0.85em">Each company needs a one-time authorization. Tokens are saved automatically.</p></body></html>`);
+    });
+    // QBO OAuth callback
+    receiver.router.get('/qbo/callback', (req, res) => {
+      const { code, realmId, state } = req.query;
+      if (code && realmId) {
+        res.send(`<!DOCTYPE html><html><head><title>QBO Connected</title>
+<style>body{font-family:-apple-system,sans-serif;max-width:600px;margin:60px auto;padding:0 20px;color:#333}
+a.btn{display:inline-block;background:#2CA01C;color:#fff;padding:12px 32px;border-radius:6px;text-decoration:none;font-size:1.1em;margin:20px 0}
+.success{background:#e8f5e9;border:1px solid #2CA01C;padding:16px;border-radius:6px;margin:20px 0}</style></head>
+<body><h1>Connected!</h1>
+<div class="success"><b>Company (realmId):</b> ${realmId}<br>Tokens saved automatically.</div>
+<a class="btn" href="/qbo/connect">Connect Another Company</a>
+<p style="color:#888">Or close this tab if you're done.</p></body></html>`);
+        // Auto-exchange the code for tokens
+        const basicAuth = Buffer.from(`${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`).toString('base64');
+        const postData = `grant_type=authorization_code&code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent('https://agents-mac-mini.tail8173ed.ts.net/qbo/callback')}`;
+        const https = require('https');
+        const reqToken = https.request({
+          hostname: 'oauth.platform.intuit.com',
+          path: '/oauth2/v1/tokens/bearer',
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${basicAuth}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+            'Content-Length': Buffer.byteLength(postData),
+          },
+        }, (tokenRes) => {
+          let body = '';
+          tokenRes.on('data', (chunk) => body += chunk);
+          tokenRes.on('end', () => {
+            try {
+              const tokens = JSON.parse(body);
+              if (tokens.error) {
+                console.error(`  ✗ QBO token exchange failed: ${tokens.error}`);
+                return;
+              }
+              const tokenData = { ...tokens, realmId, created_at: new Date().toISOString() };
+              let allTokens = {};
+              const TOKEN_PATH = './qbo-tokens.json';
+              if (fs.existsSync(TOKEN_PATH)) {
+                try { allTokens = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf8')); } catch {}
+              }
+              allTokens[realmId] = tokenData;
+              fs.writeFileSync(TOKEN_PATH, JSON.stringify(allTokens, null, 2), 'utf8');
+              console.log(`  ✓ QBO tokens saved for realmId ${realmId}`);
+            } catch (err) {
+              console.error(`  ✗ QBO token parse error: ${err.message}`);
+            }
+          });
+        });
+        reqToken.write(postData);
+        reqToken.end();
+      } else {
+        res.send(`<h2>QBO Authorization Failed</h2><p>Missing code or realmId.</p><pre>${JSON.stringify(req.query, null, 2)}</pre>`);
+      }
     });
     app = new App({
       token: botToken,
