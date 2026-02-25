@@ -1058,3 +1058,24 @@ Here's what's worth saving:
   2. Find 5 micro-influencers (10-30K), like 5 posts each, leave 1 comment each, log results
 - Jin can execute both via browser_session tool
 - Flag: run from Mac Mini IP may trigger Instagram suspicious activity — space actions out, vary comments
+
+
+--- Feb 24, 5:53 PM ---
+**Memory extract — worth saving:**
+
+**Infrastructure**
+- Google Calendar API confirmed working this session (Joe verified via calendar pull)
+- Google Docs API still broken — writes to Drive Live Log failing silently
+- Project ID: `curious-mender-488106-u2` — Docs API needs enabling to close the memory loop
+- Manual memory protocol: update `session-log.txt` on Mac Mini → DM Jin in Slack `!reload`
+
+**J.Adams Shoes — Active Tasks**
+- Two Instagram engagement SOPs received and confirmed:
+  1. Like all comments on most recent post
+  2. Find 5 female fashion influencers (10–30K followers), like 5 posts each, leave 1 comment each, log to Google Sheet (J.Adams Influencer Outreach folder)
+- Both tasks are agent-executable via `browser_session` — blocked only on Instagram credentials
+- Joe clarified: agent should only take on tasks it can fully execute autonomously — flag capability gaps before starting
+
+**Clarification on agent scope**
+- Joe wants honest capability assessments upfront, not assumed execution
+- Style/aesthetic judgment (influencer fit) flagged as human review point — Jin executes mechanical steps, surfaces results for approval
