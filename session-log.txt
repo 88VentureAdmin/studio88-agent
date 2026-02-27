@@ -1,5 +1,5 @@
 JIN SESSION LOG
-Last updated: February 24, 2026 — Session 9
+Last updated: February 25, 2026 — Session 15
 =====================================================
 
 WHO JIN IS
@@ -12,1157 +12,230 @@ Both instances share this session log as their brain. They are the same person.
 
 Running on: Mac Mini M4 16GB (Agents-Mac-mini.local), user: agentserver
 Project directory: /Users/agentserver/studio88-agent
-Stack: Node.js, Anthropic SDK (claude-sonnet-4-6), @slack/bolt, googleapis, playwright
-Start: managed by PM2 via ecosystem.config.js (kill_timeout=10s, restart_delay=3s)
+Stack: Node.js, Anthropic SDK (claude-sonnet-4-6), @slack/bolt, googleapis, @modelcontextprotocol/sdk
+Start: managed by PM2 — `pm2 restart jin` (never manual kill/nohup)
 Reload context mid-session: DM Jin "!reload" in Slack (no restart needed)
 
 GOOGLE WORKSPACE ACCOUNTS
 --------------------------
 Joe: joe@studio-88.com (primary, personal)
-Jin: jin@studio-88.com (created Feb 23 — Jin's own identity)
+Jin: jin@studio-88.com (own identity, OAuth active)
+  - Scopes: Gmail read/send/modify, Calendar, Drive, Sheets, Forms
+  - Tokens: jin-gmail-tokens.json (Joe's backed up at joe-gmail-tokens.json)
 AI Ops: ai-ops@studio-88.com (shared intake inbox, future use)
-
 Service account: jin-drive-access@curious-mender-488106-u2.iam.gserviceaccount.com
-  - Client ID: 105519243276116656511
-  - Domain-wide delegation: CONFIGURED (scopes: gmail, drive, calendar, sheets)
-  - Impersonates jin@studio-88.com for Jin's own Gmail/Drive/Calendar/Sheets
-  - Falls back to Joe's OAuth if delegation not yet propagated
-  - Status: delegation submitted, awaiting Google propagation (can take up to 24h)
+  - Domain-wide delegation ACTIVE
 
 =============================================================
-WHAT'S BUILT — COMPLETE (as of Feb 24, Session 9)
+WHAT'S BUILT — COMPLETE (as of Feb 25, Session 15)
 =============================================================
 
 CORE:
   ✅ Slack bot (HTTP mode via Tailscale Funnel, DMs + channels + app_mentions)
-  ✅ ExpressReceiver for HTTP mode (replaced default HTTPReceiver for middleware support)
-  ✅ Google Drive context loaded at startup (Master Context + Convo Log + memory files)
-  ✅ Image/screenshot support (Slack file download via bot token)
+  ✅ Google Drive context loaded at startup (Master Context + memory files)
+  ✅ Image/screenshot support (Slack file download + Drive upload)
   ✅ URL auto-fetching (including authenticated Google Drive links)
-  ✅ Long message handling (extractTextFromBlocks for Slack rich_text blocks)
-  ✅ Conversation history persistence (disk + Drive sync)
-  ✅ Streaming responses (chat.update with throttled deltas, ▍ cursor)
+  ✅ Conversation history persistence (disk + Drive sync every 5 msgs)
+  ✅ Streaming responses (chat.update with throttled deltas, cursor)
   ✅ Natural ack flow: instant "ok" → 30s "one sec..." → streaming response
-  ✅ Message interruption (AbortController, new message cancels in-flight request)
-  ✅ Slack history backfill (last 72h on startup, fills gaps from restarts)
-  ✅ Graceful shutdown handler (SIGTERM/SIGINT → app.stop() with 8s timeout guard)
-  ✅ Socket Mode fallback (clientPingTimeoutMS=15s, serverPingTimeoutMS=60s, watchdog)
-  ✅ PM2 ecosystem config (kill_timeout=10s, restart_delay=3s, max_memory_restart=512M)
-  ✅ Event deduplication for HTTP mode retries (client_msg_id or ts, 5min TTL)
-  ✅ Anthropic retry logic (3 retries, exponential backoff, friendly error messages)
-  ✅ Brave Search API live (web_search tool working, free tier 2K queries/month)
-  ✅ Inline Slack uploads for generated images and screenshots
+  ✅ Message interruption (AbortController)
+  ✅ Slack history backfill (last 72h on startup)
+  ✅ Graceful shutdown + PM2 ecosystem config
+  ✅ Event deduplication for HTTP mode retries
+  ✅ Anthropic retry logic (3 retries, exponential backoff)
+  ✅ Haiku fallback (Sonnet overload → 3 retries → auto Haiku with notification)
+  ✅ DM threading fix: no threads in DMs, channels thread normally
+
+MCP SERVERS:
+  ✅ Brave Search (6 tools) — web search, local search, etc.
+  ✅ Playwright (22 tools) — full browser automation
+  ✅ Connected via @modelcontextprotocol/sdk StdioClientTransport (npx)
 
 MEMORY SYSTEM:
   ✅ Short-term: in-memory conversation history + Slack backfill (72h)
   ✅ Medium-term: Drive Live Log (auto-written after conversations)
-  ✅ Long-term: memory/SOUL.md, memory/JOE.md, memory/MEMORY.md, memory/CULTURE.md
-  ✅ Deep consolidation: 25 min inactivity → Claude reviews conversation + memory files → updates MEMORY/JOE/CULTURE
-  ✅ Drive Weekly Digest (compressed via !digest command)
-  ✅ Knowledge vault: /Users/agentserver/jin-vault/ (Obsidian-compatible markdown vault)
-    Folders: brands/, people/, strategy/, meetings/, projects/, daily/, inbox/
+  ✅ Long-term: memory/SOUL.md, JOE.md, MEMORY.md, CULTURE.md
+  ✅ Deep consolidation: 25 min inactivity → reviews conversation → updates memory
+  ✅ Drive Weekly Digest (!digest) → Quarterly Archive (!archive)
+  ✅ Knowledge vault: /Users/agentserver/jin-vault/ (Obsidian-compatible)
+  ✅ Real-time fact extraction (Haiku, async after every exchange)
 
-TOOLS (38 total):
-  Communication:
-    - send_slack_message, search_slack, list_slack_channels, get_slack_thread, set_reminder
-    - read_gmail, send_email, reply_email
-  Productivity:
-    - get_calendar_events, create_calendar_event, write_sheet
-  Knowledge & Memory:
-    - save_note, search_knowledge, list_notes (Obsidian vault)
-    - write_to_memory, read_drive_file, update_drive_file
-    - create_drive_file, list_drive_files
-  Web & Browser:
-    - web_search (Brave), browse_web, screenshot_webpage
-    - browser_session (interactive: goto, click, type, select, scroll, extract, screenshot, wait, back, close)
-    - get_youtube_transcript, fetch_pdf
-  Creative:
-    - generate_image (DALL-E 3 via OpenAI — uploads inline to Slack)
-  System:
-    - run_shell, create_file, read_file, list_directory
-    - trigger_webhook, http_request
-    - transcribe_audio (OpenAI Whisper)
+TOOLS (45+ custom + 28 MCP):
+  Communication: send_slack_message, search_slack, list_slack_channels, get_slack_thread,
+    set_reminder, delete_slack_message, list_slack_messages, react_to_message, pin_message,
+    read_gmail, send_email, reply_email
+  Productivity: get_calendar_events, create_calendar_event, write_sheet
+  Drive: read_drive_file, update_drive_file, create_drive_file, list_drive_files,
+    delete_drive_file, upload_slack_file_to_drive, create_drive_folder, create_drive_doc,
+    create_drive_sheet, move_drive_file, rename_drive_file, share_drive_file
+  Knowledge: save_note, search_knowledge, list_notes, write_to_memory
+  Web: (via MCP — Brave Search + Playwright browser tools)
+  Creative: generate_image (DALL-E 3 via OpenAI)
+  Financial: qbo_profit_and_loss, qbo_balance_sheet, qbo_cash_flow, qbo_invoices,
+    qbo_bills, qbo_accounts, qbo_transactions, qbo_customers, qbo_vendors, qbo_query
+  System: run_shell, create_file, read_file, list_directory, trigger_webhook,
+    http_request, transcribe_audio, get_youtube_transcript, fetch_pdf
 
 COMMANDS:
-  - !reload — re-read session-log.txt + memory files, rebuild system prompt (no restart)
+  - !reload — re-read memory files + session log, rebuild system prompt (no restart)
   - !digest — compress Live Log → Weekly Digest
-  - !build <task> — spawn Claude Code subprocess on Mac Mini
+  - !archive — move Weekly Digest to Quarterly Archive
+  - !usage [days] — show API spend report (default 7 days)
 
-IDENTITY:
-  Jin now has his own Google Workspace account: jin@studio-88.com
-  - Sends email as himself (not as Joe)
-  - Has his own Drive (for memory files, knowledge base — future)
-  - Has his own Calendar (Joe shared his calendar with Jin)
-  - Service account delegation handles auth (no OAuth flow needed)
-  - Fallback: uses Joe's OAuth tokens if delegation not yet active
+USAGE TRACKING:
+  ✅ Every API call → usage-log.json (model, tokens, cost, user, context)
+  ✅ Weekly spend report cron: Monday 9AM PST → Joe's DM
+  ✅ Pricing: Sonnet 4.6 ($3/M in, $15/M out), Haiku 4.5 ($0.80/M in, $4/M out)
+
+QBO — LIVE:
+  ✅ 3 companies: 88 Venture Studio, SB Foods LLC, Bonsai Heirloom LLC
+  ✅ Auto token refresh, 10 tools
+  ✅ Connect page: https://agents-mac-mini.tail8173ed.ts.net/qbo/connect
+  ⏳ Still to add: J.Adams, SFD
 
 INFRASTRUCTURE:
   Mac Mini M4 16GB (primary)
     - PM2: jin (agent.js), heartbeat (heartbeat.js), tailscale
-    - Tailscale SSH: 100.83.77.44 (confirmed working over 5G via Termius)
     - Tailscale Funnel: https://agents-mac-mini.tail8173ed.ts.net → localhost:3000
-    - HTTP mode (ExpressReceiver) — Slack sends events via HTTP POST with retries
-    - Socket Mode OFF in Slack dashboard, SLACK_APP_TOKEN still in .env as fallback
-    - ⚠ Funnel exposes port to public internet — scanners hit it constantly (harmless, all rejected)
+    - HTTP mode (ExpressReceiver)
   Hetzner CPX31 (standby) — jin-cloud, 5.78.150.102
     - INSTANCE_ROLE=standby, code at /opt/studio88-agent/
-    - PM2: jin + heartbeat running
-    - ⚠ Needs code sync: Session 9 changes (ExpressReceiver, ack flow, Brave fix) not deployed yet
-  Render — CANCELLED (replaced by Hetzner)
-  Railway — CANCELLED ($60/yr saved)
+    - ⚠ Needs sync: Sessions 10-15 changes not deployed
+  Render — live but secondary (crash-prone when Gmail tokens missing)
   GitHub: https://github.com/88VentureAdmin/studio88-agent (private)
 
-OBSIDIAN VAULT — /Users/agentserver/jin-vault/
-  people/:
-    - Joe Ko, Tracy Wang, Emma Chang, Joy Zhou, Celeste, Kitty, Apple, Kathrine Gilmer, Steven Gee
-  brands/:
-    - 88 Venture Studio (full operational template), Bonsai Heirloom, J.Adams, Boley, Pedipad
-  strategy/:
-    - AI Infrastructure Strategy, Brand Financial Health, Culture & Operating Principles
-
 =============================================================
-WHAT JOE NEEDS TO DO
+CURRENT PRIORITIES
 =============================================================
 
-1. ✅ Create jin@studio-88.com — DONE
-2. ✅ Set up domain-wide delegation in Google Admin — DONE
-3. ✅ Share calendar with jin@studio-88.com — DONE
-4. ✅ Cancel Railway subscription — DONE ($60/yr saved)
-5. ✅ OpenAI API key added — DONE (business service account)
-6. ⏳ WAIT for delegation to propagate (can take up to 24h)
-   - I test on every startup. When it works, you'll see:
-     "✓ Jin delegation active (jin@studio-88.com)" in logs
-   - Until then, Jin falls back to Joe's OAuth (everything still works)
+1. AI Readiness Survey — sent to all 11 staff, deadline Thu Feb 27
+   - Responses inform dashboard design + agent deployment sequencing
+2. Dashboard brief written — on deck after survey data
+3. Triple Whale API — parked, needs Shopify domains from Joe
+4. Sync Hetzner standby with current code
+5. J.Adams QBO connection + Amazon FBA fee impact modeling
 
 =============================================================
-BUILD QUEUE — NEXT
+KEY RECOVERY PROCEDURES
 =============================================================
 
-Completed (Sessions 8-9):
-1. ✅ Socket Mode reliability — ecosystem.config.js, watchdog, num_connections monitoring
-2. ✅ HTTP mode migration — Tailscale Funnel + ExpressReceiver, event dedup, fully working
-3. ✅ Observational memory — real-time fact extraction via Haiku after every exchange
-4. ✅ Event-driven triggers — morning briefing (8:30am), EOD wrap-up (6pm), weekly preview (Sun 9pm) PST
-5. ✅ Brave Search API — web_search tool live (key: BSAvb..., free tier)
-6. ✅ Ack UX improved — instant "ok" → 30s "one sec..." → streaming response
-7. ✅ Anthropic retry + friendly errors — 3 retries, exponential backoff, no raw JSON shown
-
-Next (in priority order):
-1. Sync Hetzner standby — deploy Session 9 code (ExpressReceiver, ack flow, Brave fix)
-2. QuickBooks Online API — financial visibility across all brands
-   (RESEARCHED: intuit-oauth + direct HTTP, Builder tier free 500K reads/mo, one app + 4 realmIDs)
-   (BLOCKED: Joe needs to create Intuit Developer app → paste Client ID + Secret)
-3. Jin's own Drive — migrate memory files to jin@studio-88.com's Drive (once delegation propagates)
-4. Triple Whale API — revenue/ad spend visibility
-5. LingXing ERP API — inventory/sourcing visibility
-6. Canva API — design automation from templates
-7. Adobe Firefly API — on-brand image generation
-
-=============================================================
-FUTURE ARCHITECTURE — MULTI-AGENT (noted, not building yet)
-=============================================================
-
-Organizational manifest Joe described:
-  - Orchestrator agent (Jin as CoS, routes tasks)
-  - Department agents: Marketing, Ops, Finance, Creative, etc.
-  - Shared knowledge layer (Obsidian vault, shared Drive)
-  - Human-in-the-loop approvals for high-stakes actions
-  - Each agent: own Slack bot, own email, own tools, own role
-  - All brands share same department structure (~30% nuance per category)
-  - ai-ops@studio-88.com as shared intake inbox, Jin triages
-
-First team agent candidate: Social media content creator for Jessica (marketing)
-
-=============================================================
-SOCKET MODE RELIABILITY — RESEARCH NOTES (Feb 23, Session 8)
-=============================================================
-
-Root cause: Slack round-robins events across ALL WebSocket connections (live + dead).
-When PM2 kills Jin without clean WebSocket close frame, stale connections persist.
-No Slack API exists to list or revoke individual Socket Mode connections.
-
-Fixes implemented this session:
-  1. ecosystem.config.js — kill_timeout=10s (was PM2 default 1.6s!)
-  2. Shutdown timeout guard — 8s force-exit before PM2 escalates to SIGKILL
-  3. num_connections monitoring — intercepts raw WS hello message, logs count
-  4. Event delivery watchdog — checks every 5min, force-reconnects after 30min silence
-  5. Watchdog timer reset — on every message event and app_mention
-
-Emergency recovery (if Jin stops receiving messages):
-  Option A: pm2 restart jin (should work now with proper graceful shutdown)
-  Option B: Regenerate SLACK_APP_TOKEN in Slack dashboard → paste in .env → restart
-            (nuclear option: instantly kills ALL stale connections)
-
-Long-term fix: Switch to HTTP mode using Tailscale Funnel
-  - Stateless, built-in retries, no stale connection problem
-  - Slack recommends HTTP for production
-
-=============================================================
-BUGS FIXED (Sessions 7-8)
-=============================================================
-
-1. Long messages not received — Slack puts long text in blocks, not message.text
-   Fix: extractTextFromBlocks() + resolveMessageText()
-
-2. Socket Mode instability — 5s pong timeout too aggressive, reconnect storms
-   Fix: clientPingTimeoutMS=15s, serverPingTimeoutMS=60s
-
-3. Messages lost during Socket Mode reconnects
-   Fix: Slack history backfill on startup (last 72h)
-
-4. Race condition with rapid messages — AbortController registered after async ack
-   Fix: Register controller immediately before any async work
-
-5. Stale WebSocket connections — PM2 restart kills process without disconnect,
-   Slack round-robins events to dead connections
-   Fix: Graceful shutdown + ecosystem.config.js (kill_timeout=10s) + event watchdog + num_connections monitoring
-
-6. Duplicate tool names — old run_shell/read_file definitions conflicted with new ones
-   Fix: Removed old definitions from TOOLS array
-
-7. Anthropic 400 error "Tool names must be unique" — caused by #6 above
-
-8. Team members not saved — Jin received Tracy+Emma but lost Joy/Celeste/Kitty/Apple/Kathrine/Steven
-   to stale connections. Manually saved all 6 to vault.
-
-
---- Feb 23, 11:13 PM ---
-Logged. Here's the updated roster:
-
-**Marketing**
-- Richelle – CRO, part-time (20hrs/wk), oversees digital marketing all brands
-- Sultan – Google Ads all brands, full-time contractor (India)
-- Abdullah – SEO all brands, part-time contractor (India), value TBD, reports via SEMrush organic growth
-- Jessica Vuong – Marketing PM, full-time, 9-5 PST. System builder, coordinates content/UX/digital, owns email marketing + social content machine (customer retention side)
-- Jessica Ko – Partner/Social lead, full-time, 9-5 PST. TikTok (SFD), retention marketing all brands, customer service oversight, some admin/HR proxy, content muse
-- Anne (Princess) – Customer service + social retention responses, content shorts (SFD), Philippines, full-time 9-5 PST
-
-**Finance/Legal**
-- Eileen – Bookkeeper, Philippines, 1-9PM PST, QBO
-- XOA Tax – 3rd party CPA, tax filing
-- Louisa Zhou – General Counsel + shareholder, monthly retainer
-
-Who are Tracy, Emma, Joy, Celeste, Kitty, Apple, Kathrine, and Steven?
-
-
---- Feb 23, 11:35 PM ---
-**MEMORY SAVE — 88 Venture Studio Team Roster**
-
-**Kathrine Gilmer** — Creative Director / Ecommerce Ops Manager / Fashion Designer (part-time). RISD Apparel Design. Runs Shopify for BH, SFD, JA, Sunbay, CCS. Oversees brand creative direction. Detail-oriented, process/doc-driven, SOP builder. Mon/Tue/Thu, 9AM–5PM CT. Husband Jeffrey (pro photographer, periodic contractor).
-
-**Steven Gee** — Employee #2, Renaissance man. UCR Business Econ. Started in Amazon/customer service, now Head of Video Content, Videography, Product Photography. Covers creative suite and graphic design as needed.
-
-**Tracy Wang** — Head of Logistics/Supply Chain + Head of Sourcing + SHEIN account manager for SFD. ~3 years tenure. Former software PM. Data-driven, exceptional communicator, sets reporting culture. Wants to shift fully to supply chain/logistics. Taiwan, 4PM PST + 8hrs.
-
-**Emma Chang** — Under Tracy. Company-wide inventory forecasting — no stockouts, no overstock across all channels. Data analysis background, Power BI, flat files. Taiwan, same hours as Tracy.
-
-**Joy Zhou** — Head of Marketplace (Amazon, Walmart, Temu). 15+ years Amazon. Strong logic, proactive, disciplined. Limited English speaking but reads well. Primary account: Sunbay Foods. Manages account managers. Productivity not yet clearly demonstrated. China, Tue–Sun, 3PM PST + 8hrs.
-
-**Celeste** — Amazon account manager for J.Adams. Reports to Joy. Apparel experience. China,
-
-
---- Feb 23, 11:44 PM ---
-Nothing in this conversation is worth saving to long-term memory.
-
-The content is all team roster/org context — already extracted and saved in prior turns. This exchange is confirmation of existing records (the two Jessicas and Anne), not new decisions, strategic shifts, or revenue-relevant developments.
-
-No action required.
-
-
---- Feb 23, 11:55 PM ---
-**Saved to long-term memory:**
-
-**Team Roster — 88 Venture Studio (23 people confirmed)**
-
-| # | Name | Role | Location | Hours |
-|---|------|------|----------|-------|
-| 1 | Joe Ko | Founder/CEO | US | — |
-| 2 | Jessica Ko | Partner/Social/TikTok/HR proxy | US | 9-5 PST |
-| 3 | Jessica Vuong | Marketing PM | US | 9-5 PST |
-| 4 | Richelle | CRO | US | Part-time |
-| 5 | Sultan | Google Ads | — | — |
-| 6 | Abdullah | SEO | — | — |
-| 7 | Anne (Princess) | Customer Service/Social retention | Philippines | 9-5 PST |
-| 8 | Kathrine Gilmer | Creative Director/Ecom Ops | US | Part-time Mon/Tue/Thu |
-| 9 | Steven Gee | Video/Photo/Content | US | — |
-| 10 | Jeffrey Gilmer | Contractor Photographer | US | — |
-| 11 | Tracy Wang | Head of Logistics/Supply Chain | US | — |
-| 12 | Emma Chang | Forecasting | Taiwan | — |
-| 13 | Cindy | Warehouse Manager | US | — |
-| 14 | Jose | Warehouse | US | — |
-| 15 | Joy Zhou | Head of Marketplace | China | 3PM-11PM PST Tue-Sun |
-| 16 | Celeste | Amazon AM — J.Adams | China | Same as Joy |
-
-
---- Feb 24, 12:21 AM ---
-Nothing in this conversation is worth saving to long-term memory.
-
-The tariff question was exploratory and Joe didn't confirm any decision, business context, or next step. The technical troubleshooting (Railway deployment, Dockerfile, API key typo) was in-session work — no task was completed, no decision was finalized, and the deployment never succeeded within this conversation.
-
-If the Railway deployment resolves or Joe decides to pursue the HTS/exclusion review for J.Adams, those are worth saving at that point.
-
-
-=============================================================
-SESSION 9 — Feb 24, 2026
-=============================================================
-
-WHAT WE DID:
-1. Ack UX redesign — replaced random phrases ("let me think on that...") with natural flow:
-   - Instant: "ok" (simple receipt)
-   - 30 seconds: "one sec..." / "still on it..." / "working on it..." (progress timer)
-   - Then streaming response takes over naturally
-   Code: ACK_PHRASES replaced with WAIT_PHRASES, 30s setTimeout with streamingStarted flag
-
-2. Brave Search API key added — BSAvbxSjFuMN986uL_cFJq4PaXsHD9X
-   - web_search tool now fully functional
-   - Fixed gzip bug: was sending Accept-Encoding:gzip without decompressing → JSON parse failure
-   - Removed gzip header, added better error messages on parse failure
-
-3. HTTP mode event delivery fix — Slack stopped delivering events after URL reset
-   - Root cause: Slack suspended delivery after repeated signature verification failures
-     (those failures were from internet scanner GET requests hitting /slack/events before
-     we switched to ExpressReceiver — the old HTTPReceiver tried to verify ALL requests)
-   - Fix: Joe removed Event Subscriptions URL → saved → re-entered URL → re-verified → saved
-   - This reset Slack's delivery state and events started flowing again
-   - IMPORTANT: If events stop again, do the URL remove/re-add/save cycle
-
-4. Switched to ExpressReceiver — replaced default Bolt HTTPReceiver
-   - Added router middleware for Slack-only request logging (filters out scanner noise)
-   - processBeforeResponse: true for proper event handling
-   - Import: added ExpressReceiver to @slack/bolt require
-
-5. QBO research completed — full integration guide produced:
-   - intuit-oauth (official) + direct HTTP calls for reports
-   - One app, four brands (separate realmIDs, separate tokens per brand)
-   - Builder tier: free, 500K CorePlus reads/month
-   - Reports: P&L, Balance Sheet, Cash Flow, AR/AP Aging, Trial Balance, General Ledger
-   - No read-only scope exists — enforce read-only in code (only GET requests)
-   - OAuth flow: standard auth code grant, similar to Google
-   - Tokens: access 1hr (auto-refresh), refresh 5yr
-   - BLOCKED: waiting for Joe to create Intuit Developer app
-
-BUGS FIXED (Session 9):
-9. Slack event delivery stopped — Slack suspended HTTP delivery after repeated 401s
-   from scanner traffic hitting the endpoint without x-slack-signature headers.
-   Fix: URL remove/re-add/save cycle in Slack Event Subscriptions page.
-
-10. Brave Search gzip parse failure — web_search sent Accept-Encoding:gzip but didn't
-    decompress the response. Brave sometimes gzip-compresses, causing JSON.parse to fail.
-    Fix: Removed gzip header from the Brave Search API call.
-
-11. Noisy debug logging — internet scanners spamming the Tailscale Funnel URL caused
-    massive log pollution (path traversal attempts, .env probes, actuator endpoints).
-    Fix: Filtered HTTP logging to only show requests with x-slack-signature header.
-
-KEY LESSON — HTTP MODE RECOVERY:
-If Jin stops receiving Slack messages in HTTP mode:
-  1. Check Event Subscriptions page at api.slack.com/apps
-  2. Remove the Request URL → Save Changes
+If Jin stops receiving Slack messages (HTTP mode):
+  1. Check Event Subscriptions at api.slack.com/apps
+  2. Remove Request URL → Save
   3. Re-enter: https://agents-mac-mini.tail8173ed.ts.net/slack/events
-  4. Wait for green Verified → Save Changes
-  This resets Slack's delivery state. Events should resume immediately.
+  4. Wait for green Verified → Save
 
-FILES CHANGED (Session 9):
-  - agent.js: ExpressReceiver, ack UX (WAIT_PHRASES + 30s timer), Brave gzip fix,
-    Slack-only request logging
-  - .env: BRAVE_SEARCH_API_KEY added (was already placeholder)
+If PM2 env vars are stale:
+  pm2 delete jin && pm2 start agent.js --name jin --cwd /Users/agentserver/studio88-agent && pm2 save
 
-TEAM ROSTER UPDATE:
-  Jin received additional team members via Slack conversation (Session 8 overflow):
-  - Richelle, Sultan, Abdullah, Jessica Vuong, Jessica Ko, Anne (Princess)
-  - Eileen (bookkeeper), XOA Tax (CPA), Louisa Zhou (General Counsel)
-  Total confirmed: 23+ people across Marketing, Finance/Legal, Logistics, Marketplace, Creative, Warehouse
+=============================================================
+SESSION HISTORY (compressed)
+=============================================================
 
---- Feb 24, 12:41 AM (Jin saved) ---
-## Self-Improvement Directive — AI Infrastructure Review (Joe's standing order, Feb 24 2026)
+S1-7: Core build — Slack bot, Drive context, streaming, conversation persistence
+S8: Socket Mode reliability, observational memory, event-driven triggers, Brave Search
+S9: HTTP mode migration, ExpressReceiver, QBO research, ack UX redesign
+S10: Jin delegation fixed, Drive tools (create/move/rename/share), Calendar invites
+S11: QBO unblocked — production keys, Intuit compliance, 3 companies connected, 10 tools
+S12: Workforce evaluation (19 scorecards), Google Forms API, AI Readiness Survey created
+S13: (continuation of S12 work)
+S14: MCP migration (Brave Search + Playwright), Slack file handling, DM threading fix, new tools
+S15: Usage tracking live, Haiku fallback, new Slack tools (delete/list/react/pin),
+     Render refs purged, dashboard brief created, survey sent to all staff
 
-Every 3 months, Jin must proactively:
-1. Search the web for developments in AI agent memory systems, tools, orchestration frameworks, and what others are building with AI chiefs of staff / AI agents
-2. Self-evaluate current memory architecture, tools, and capabilities against what's now possible
-3. Either bring recommendations to Joe for approval, OR apply minor self-edits directly (e.g. updating memory files, adding context)
-4. Document what was reviewed and what changed
+=============================================================
+TEAM ROSTER — 88 Venture Studio
+=============================================================
 
-This exists because AI tech moves fast — what's best practice today may be outdated in 90 days. Joe wants Jin to stay current without being asked.
+See workforce-evaluation.md for full 19-person assessment with scores.
+Key roster: Joe Ko (CEO), Jessica Ko (Partner/Social), Jessica Vuong (Marketing PM),
+Kathrine Gilmer (Creative Dir), Steven Gee (Video/Photo), Tracy Wang (Logistics/SC),
+Emma Chang (Forecasting), Joy Zhou (Marketplace), Celeste (Amazon AM), Jeffrey PH (Walmart/Temu),
+Anne/Princess (CS), Richelle (CRO PT), Eileen (Bookkeeper), John Holter (BH Nursery Mgr)
 
-Next scheduled review: ~May 24, 2026.
+=============================================================
+BRAND OPERATIONS SUMMARY
+=============================================================
 
---- Feb 24, 2026 (deep consolidation) ---
-Updated memory files: MEMORY.md
+Bonsai Heirloom: Drop-based model, Pescadero nursery, $31K/mo fixed costs,
+  YouTube 190K subs, Shopify + Google Ads live, Meta Ads gap. Fragile without frequent drops.
 
---- Feb 24, 8:46 AM (Jin saved) ---
-## Self-Improvement Directive — Quarterly AI Infrastructure Review
+Sunbay Foods: US supplier → co-packer → Amazon FBA. MCF for Shopify. Zero advertising.
+  Social dormant. Infrastructure-ready but unactivated.
 
-Every 3 months, Jin is to proactively search the web to self-evaluate:
-- Current memory architecture and tools
-- Whether better memory systems, agent frameworks, or AI infrastructure exist
-- What others are building and doing differently in the AI agent space
+J.Adams: Survival priority. Amazon main channel, 35%+ return rate.
+  New FBA returns processing fee = direct margin hit. Fee impact modeling needed.
 
-After researching, either:
-1. Bring findings to Joe for approval before applying changes, OR
-2. Apply minor edits directly if clearly beneficial and low-risk
+CCS: Service partner template. PE-backed, niche, capital-ready.
+  Bi-weekly check-ins with Joe.
 
-This is a standing directive. First review due: ~May 24, 2026. Repeat every 3 months.
+--- Feb 26, 2026 (deep consolidation) ---
+Updated memory files: MEMORY.md, CULTURE.md
 
-Joe's reasoning: AI tech changes too fast — Jin needs to evolve with it proactively, not wait to be told.
 
---- Feb 24, 8:52 AM (Jin saved) ---
-## Bonsai Heirloom — Operations Detail (added Feb 24 2026)
+--- Feb 26, 9:07 PM ---
+**Memory update — worth saving:**
 
-**Nursery:** Pescadero, CA — plants grown and shipped from there
-**Nursery Manager / Head of Production:** John Holter — full-time staff (add to team roster as #17)
-**Pots & Accessories:** Produced in China
+- **Social media outreach SOP and all related files deleted** — Joe confirmed this was a test; the entire workstream is scrapped. Influencer tracker, outreach doc, Weekly Digest references all flagged for removal.
+- **No lasting artifacts exist in Drive** from this workstream — either never saved or already gone from prior sessions.
+- **Mac Mini SSH access is broken** — Remote Login was off; fix requires physical access. Long-term fix discussed: TinyPilot Voyager 3 (~$300) recommended for permanent KVM-over-IP access. Joe is aware, no purchase confirmed yet.
 
-**Current Marketing Stack:**
-- Shopify site (live)
-- Google Ads (running)
-- Social content posting (Soosk)
-- YouTube — long-form content, 190K subscribers
-- Email marketing (active)
-- Content creation ongoing
-
-**Gaps / Wants:**
-- Meta Ads (not yet running)
-- More UGC
-
-## Team Roster Addition
-| 17 | John Holter | Nursery Manager / Head of Production — Bonsai Heirloom | Pescadero, CA | Full-time |
-
-## Self-Infrastructure Improvement Directive (added Feb 24 2026)
-Every 3 months, Jin should search the web to self-evaluate current memory architecture, tools, and AI infrastructure approaches — looking for better options, new methods, or emerging patterns. Then either bring recommendations to Joe for approval or apply edits directly if minor. This is a standing directive because AI tech changes fast.
-Next quarterly review due: May 24, 2026.
-
-
---- Feb 24, 8:55 AM ---
-(Memory extraction only — no tools)
-
----
-
-**EXTRACT FOR LONG-TERM MEMORY:**
-
-1. **Bonsai Heirloom — Business Context Update**
- - Plants grown and shipped from nursery in Pescadero, CA
- - John Holter = full-time staff, Nursery Manager / Head of Production
- - Active channels: Shopify, Google Ads, Soosk, YouTube (190K subs), email marketing, content creation
- - Pots & accessories sourced from China
- - Gaps/wants: Meta Ads (not yet running), more UGC
-
-2. **Jin Self-Improvement Directive (Standing Instruction)**
- - Every 3 months, search web to self-evaluate current memory systems and AI tools
- - Identify better alternatives; bring to Joe for approval or apply edits directly
- - Next review due: ~May 24, 2025
- - Rationale: AI tech changes fast; staying current is part of Jin's operating mandate
-
-3. **J.Adams — Fee Risk Flag**
- - Amazon introducing Returns Processing Fee for clothing/footwear/accessories
- - J.Adams runs 35%+ return rate — direct margin hit
- - Action item: model out exact fee impact using Amazon's footwear return fee schedule
-
---- Feb 24, 8:57 AM (Jin saved) ---
-## Bonsai Heirloom — Operations Update (Feb 24 2026)
-- Plants grown at nursery in Pescadero, CA — ships direct from there
-- Pots & accessories sourced from China
-- John Holter: Full-time Nursery Manager / Head of Production (Pescadero) — Team member #17
-- Active channels: Shopify, Google Ads, Soosk social posting, YouTube (190K subs — major asset), email marketing
-- Gaps: Meta Ads not yet launched, more UGC wanted
-
-## Sunbay Foods — Operations Update (Feb 24 2026)
-- Product ordered from US supplier → sent to US co-packer → ships to Amazon FBA
-- Amazon MCF fulfills Shopify store orders
-- Shopify site is live
-- Zero advertising — no Google Ads, no Meta, no social content being produced
-- Social accounts exist but dormant
-- Assessment: great potential, nothing activated yet
-
-
---- Feb 24, 8:59 AM ---
-**Memory extracted — worth saving:**
-
----
-
-**Sunbay — Current State (as of today)**
-- Product ordered from US supplier → sent to US co-packer → into Amazon FBA
-- Amazon MCF fulfills Shopify store orders
-- Shopify site is live
-- Zero advertising — no Google Ads, no Meta, no social content
-- Social accounts created but dormant
-- Joe's assessment: "great potential but nothing" — brand is infrastructure-ready but unactivated
-- **Priority gap:** needs a demand activation plan (ads, content, or both)
-
----
-
-**Fee note to revisit:** Low-Price FBA now $0.86 cheaper than standard — if Sunbay's ASP qualifies, worth modeling before any ad spend math.
-
---- Feb 24, 9:02 AM (Jin saved) ---
-## Bonsai Heirloom — Operational Update (Feb 24 2026)
-- Plants grown at nursery in Pescadero, CA — ships from there
-- Pots & accessories sourced from China
-- John Holter — Full-time Nursery Manager / Head of Production, Pescadero (Team member #17)
-- Active channels: Shopify, Google Ads, Soosk social posting, YouTube (190K subs, long-form content), email marketing
-- Wants: Meta Ads (not yet running), more UGC
-
-## Sunbay Foods — Operational Update (Feb 24 2026)
-- Product ordered from US suppliers, sent to US co-packer
-- From co-packer → Amazon FBA
-- Amazon MCF fulfills Shopify orders
-- Shopify is live but no ads, no traffic, no social content being created
-- Social accounts exist but dormant
-- Summary: infrastructure solid, completely dark on marketing. Great potential, nothing activated.
-
-## Shoes for Dinner (SFD) — Operational Update (Feb 24 2026)
-- Active on: SHEIN, Walmart, Temu, TikTok, Shopify
-- No channel is profitable currently
-- Primary function: liquidation vehicle for J.Adams excess/returned inventory (used as a "mask")
-- Still figuring out path to profitability
-- Goal: grow D2C (Shopify)
-- No ads to Shopify, no consistent traffic, no regular content posting
-- Paid $10K to Morace Media (TikTok agency) with $50K revenue guarantee — not performing
-- Need: content pipeline, more structured approach to growth
-
-## Team Roster Addition
-- #17: John Holter — Nursery Manager / Head of Production, Bonsai Heirloom, Pescadero CA, full-time
-
-
---- Feb 24, 9:09 AM ---
-**Saving to Memory — SFD + Team**
-
-**SFD Business Context:**
-- Active on SHEIN, Walmart, Temu, TikTok Shop, Shopify — none profitable
-- Currently functioning as a liquidation channel for J.Adams excess inventory
-- Goal: build a selling machine using existing + consignment inventory (no capital investment in new inventory — too high risk at low run quantities)
-- Consignment model is the target vehicle to scale without inventory risk
-- No ads to Shopify, no real traffic, no content pipeline — both bandwidth and direction are blockers
-- Paid $10K to Morace Media (TikTok agency) with a $50K revenue guarantee — not performing. Need to verify guarantee terms and timeline in writing
-
-**SFD Strategy Path:**
-- Prove the machine first with zero-risk inventory → use conversion data to attract consignment vendors → eliminate inventory risk long-term
-- Content pipeline is the core unlock for D2C
-
-**Team — SFD Content:**
-- Steven is stretched across all brands, not available to own SFD content
-- "Kitty" (China-based graphic designer) flagged as potential resource to activate for SFD content — details TBD
-
-**J.Adams:**
-- Priority: grow Shopify, deprioritize Amazon (only Shopify is profitable)
-
----
-
-Still need: Kitty's full role, capacity, and what she currently produces.
-
-
---- Feb 24, 9:11 AM ---
-**MEMORY LOG — SFD / Portfolio Session**
-
-**SFD (Surfboard Flea Market)**
-- Strategy: Prove model with zero-risk inventory first (returns + consignment), then buy-in once data supports it
-- Real unlock is content pipeline + D2C traffic, not sourcing
-- Consignment vendors fund inventory risk indefinitely once conversion is proven
-- Blocker: bandwidth AND direction
-- Kitty (China-based graphic designer) flagged as potential resource for content support — details still needed
-
-**J.Adams**
-- Priority: Grow Shopify, move away from Amazon
-- Amazon = managed decline, Shopify = only profitable channel
-
-**Tiya**
-- Currently Amazon-only
-- Inventory imported from China, already stateside
-- Opportunity: D2C expansion
-
-**Boley**
-- Currently Amazon-only
-- D2C possible but depends on partnership structure
-
-**CCS**
-- Currently D2C-only
-- Should add Amazon — niche search intent, B2B buyers, could move fast
-
-**Portfolio-Level Pattern**
-- Most Amazon-only brands need D2C; CCS (D2C-only) needs Amazon
-- Channel expansion opportunity exists across the board — sequencing and bandwidth are the constraints
-
-**Roster Gap**
-- Kitty (China graphic designer) — not previously on file, details TBD
-
---- Feb 24, 9:11 AM (Jin saved) ---
-## Brand Updates — Feb 24 2026
-
-### Bonsai Heirloom
-- Plants grown at nursery in Pescadero, CA — ships from there
-- Pots & accessories produced in China
-- John Holter — full-time Nursery Manager / Head of Production (Pescadero)
-- Active channels: Shopify, Google Ads, Soosk social posting, YouTube (190K subs), email marketing
-- Wants: Meta Ads (not live yet), more UGC
-
-### Sunbay Foods
-- Product ordered from US suppliers, sent to US co-packer, then to Amazon FBA
-- Amazon MCF fulfills Shopify orders
-- Shopify is live but no ads, no traffic, no content
-- Social accounts created but dormant
-- One profitable SKU (honey sticks), infrastructure ready, nothing activated
-
-### Shoes for Dinner (SFD)
-- Channels: SHEIN, Walmart, Temu, TikTok, Shopify — none profitable
-- Used primarily as liquidation vehicle for J.Adams overstock
-- Goal: build D2C selling machine using existing inventory + consignment vendor shoes (no owned inventory risk)
-- No ads to Shopify, no regular content, no traffic
-- Paid $10K to Morace Media (TikTok agency) — guaranteed $50K revenue, not performing
-- Needs: content pipeline, D2C traffic engine
-- Kathrine (Kitty?) and Steven both stretched — bandwidth + direction both blocking content
-- "Kitty" = China-based graphic designer (not Kathrine Gilmer) — need more details on her role/status
-
-### J.Adams
-- Priority: grow Shopify, move away from Amazon
-- Amazon is managed decline
-
-### TIYA
-- Amazon only
-- Inventory imported from China, warehoused in US
-- D2C opportunity exists
-
-### Boley
-- Amazon only
-- D2C possible but depends on partnership structure with Reuben
-
-### CCS
-- D2C only (Shopify)
-- Should add Amazon — niche B2B buyers with search intent, could move fast
-
-### Portfolio-wide pattern
-- Amazon-only brands (TIYA, Boley) need D2C
-- D2C-only brand (CCS) needs Amazon
-- Channel expansion opportunities across the board — sequencing and bandwidth are the constraints
-
-
---- Feb 24, 9:17 AM ---
-**Extracted for Long-Term Memory:**
-
----
-
-**Strategic Shift — Org Structure**
-Joe is open to full restructuring around AI agents. No staff member is safe. Framework: define the AI-native org first, then determine who fits — not the reverse. This is now an active strategic conversation.
-
-**Channel Strategy by Brand (confirmed this session):**
-- **J.Adams** — Shopify only viable channel; managed decline on Amazon
-- **Tiya** — Amazon only; D2C expansion is opportunity; inventory imported from China, in-hand
-- **Boley** — Amazon only; D2C possible but contingent on partnership structure
-- **CCS** — D2C only; adding Amazon is a clear next move (B2B buyer, niche search intent)
-
-**Roster Addition:**
-- **Kitty** — China-based graphic designer; role/hours still unconfirmed, needs follow-up
-
-**Open Thread:**
-- Kitty's full role and contractor vs. full-time status still not captured
-
----
-
-Nothing saved on AI org structure depth yet — that conversation is pending Joe's answer on gradual vs. hard restructure approach.
-
-
---- Feb 24, 9:24 AM ---
-**Memory extract — worth saving:**
-
----
-
-**Strategic posture shift (high importance):**
-Default is now **prune**, not empower. Burden of proof is on the human to justify their seat. Every role is open for replacement by AI agent.
-
-**Timeline:** 12 months for full transition assessment.
-
-**Growth requirement:** Business must scale 4-6x to justify keeping current headcount. This is the filter for every people and AI investment decision.
-
-**Minimum human org defined:**
-- Joe (strategy, capital, relationships)
-- One operator (Tracy is lead candidate)
-- One creative (Steven is lead candidate)
-- Cindy + Jose (warehouse, non-negotiable)
-- Jin
-
-Everyone else is a candidate for elimination over 12 months.
-
-**People assessment plan (approved, not yet executed):**
-- Kolbe A Index (~$55/person) — adaptability and action style
-- CliftonStrengths Top 5 (~$22/person) — natural wiring
-- Custom AI literacy self-assessment (Joe to build or delegate)
-- Total budget: ~$1,200 for 15 people
-- Pair with direct 1:1 conversation about 12-month role evolution
-
-**Roles flagged as highest replacement risk:** Anne (CS), Abdullah (SEO), Sultan (Google Ads), Emma (forecasting)
-
-**Key decision rule:** AI investments must unlock revenue, not just cut cost — but both matter.
-
-
---- Feb 24, 9:34 AM ---
-**Memory Extract — 88 Venture Studio**
-
----
-
-**Strategic Decision:**
-Joe has adopted a **prune-first posture** for org restructuring. Default assumption is AI replaces the role. Humans must earn their slot back. Burden of proof is on the person, not the AI.
-
-**Minimum Human Org Defined (AI-native target):**
-Joe + one operator (Tracy leading candidate) + one creative (Steven leading candidate) + two warehouse (Cindy, Jose) + Jin. ~5-6 humans total.
-
-**Assessment Plan Approved:**
-- Kolbe A Index (~$55/person)
-- CliftonStrengths Top 5 (~$22/person)
-- AI literacy self-assessment (Jin to build)
-- Estimated total: ~$1,200 for full team
-- Jin will read all results + cross-reference against minimum org to produce diagnostic recommendation
-
-**Task Open:**
-Build AI literacy self-assessment (10 questions, measures current tool usage and attitude toward AI)
-
-**Roster to Assess (16 confirmed, likely incomplete):**
-Joe Ko, Jessica Ko, Jessica Vuong, Richelle (part-time CRO), Sultan, Abdullah, Anne/Princess, Kathrine Gilmer, Steven Gee, Jeffrey Gilmer (contractor), Tracy Wang, Emma Chang, Cindy, Jose, Joy Zhou, Celeste. Kitty (China graphic designer) still unconfirmed status.
-
-**Open Question:**
-Full headcount not yet confirmed. Joe to provide complete roster before assessments go out.
-
-
---- Feb 24, 9:38 AM ---
-**SAVE TO MEMORY:**
-
-**Org Assessment Cohort Finalized (9 people)**
-Full-time, computer-based roles only. Warehouse, part-time, and contractor roles excluded.
-
-1. Jessica Ko
-2. Jessica Vuong
-3. Sultan
-4. Anne / Princess
-5. Kathrine Gilmer
-6. Steven Gee
-7. Tracy Wang
-8. Emma Chang
-9. Joy Zhou
-
-**Key decision:** Celeste and Kitty excluded — their retention is contingent on Joy Zhou. If Joy doesn't work out, all three (Joy, Celeste, Kitty) get cut. No point investing in assessments for conditional headcount.
-
-**Abdullah confirmed as part-time** — not on payroll for assessment purposes.
-
-**Next action pending:** Build AI literacy self-assessment to deploy alongside Kolbe A and CliftonStrengths as a three-instrument package for the 9-person cohort.
-
-
---- Feb 24, 9:44 AM ---
-**Memory Update — 88 Venture Studio**
-
-**Assessment Cohort (Final — 9 people):**
-1. Jessica Ko
-2. Jessica Vuong
-3. Jeffrey (Philippines) — Walmart/Temu account manager
-4. Anne / Princess
-5. Kathrine Gilmer
-6. Steven Gee
-7. Tracy Wang
-8. Emma Chang
-9. Joy Zhou
-
-**Key Decisions:**
-- Abdullah removed — not full time, excluded from assessment
-- Celeste and Kitty removed — fate tied to Joy Zhou; if Joy doesn't work out, both get laid off (marketplace team dependency)
-- Sultan removed, replaced by Jeffrey (Philippines)
-- Kathrine Gilmer kept — Joe wants to understand how she can contribute
-
-**Assessment Budget Approved (pending):**
-- Kolbe A: $495 (9 × $55)
-- CliftonStrengths Top 5: $198 (9 × $22)
-- Total: $693
-- AI literacy assessment: built in-house (free)
-
-**Risk Flag:**
-- Joy Zhou is a critical dependency — Celeste and Kitty's employment contingent on her outcome
-
---- Feb 24, 2026 (deep consolidation) ---
-Updated memory files: MEMORY.md, JOE.md
-
---- Feb 24, 2:04 PM (Jin saved) ---
-## Marketplace Team — Full Roster (Updated Feb 24 2026)
-
-**Joy Zhou** — Head of Marketplace. Oversees all accounts: Amazon, Walmart, Temu. 15+ years Amazon experience. Strong logic, understands trends and Amazon algorithm, very proactive, disciplined, stable. Takes instructions well. Limited English speaking but reads and writes well (uses translation). Manages a team of AMs. Has not yet demonstrated high productivity to Joe. Primary account: Sunbay Foods. China, full-time, Tue–Sun, 3PM–11PM PST.
-
-**Celeste** — Amazon AM for J.Adams. Reports to Joy. Handles everything Amazon for J.Adams. A few years apparel experience. Limited English speaking, reads and writes well. China, same hours as Joy.
-
-**Kitty** — Full-time Graphic Designer. Under Joy's team. China, same hours. Primarily uses AI to generate marketplace images. Joe's assessment: not very good.
-
-**Apple** — Part-time Amazon AM for Boley and TIYA. Very experienced ecom manager. Limited English reading/writing but can speak. Same hours as China team. Day-to-day tasks unclear to Joe. Productivity unknown.
-
-**Jeffrey** — Philippines-based ecommerce AM. Manages J.Adams Walmart and SFD Temu. Very good with spreadsheets, flat file uploads, Excel, learning Power BI. Fast responder, driven to learn, takes on challenges. Speaks and reads English well. Affordable. Mon–Fri, 9AM–5PM PST.
-
-## Restructuring Notes (AI-driven headcount reduction)
-- Abdullah (SEO): fully replaceable by AI today
-- Sultan (Google Ads): mostly replaceable, fractional oversight only
-- Anne: repetitive CS volume replaceable by AI
-- Jessica Vuong: role shrinks to 10hrs/week with AI doing research/reporting/briefing
-- Emma Chang: role shrinks significantly if AI connected to inventory data
-- Apple + Celeste: with AI handling monitoring/reporting/analysis, execution folds into one AM role
-- Kitty: AI image generation already her primary tool — role is redundant with AI agent
-- Joy stays: strategy, oversight, marketplace judgment
-- Jeffrey stays: execution, spreadsheets, affordable, driven
-- Target: realistically go from 23 to 16-17 people with same or more output
-
-
---- Feb 24, 2:05 PM ---
-Saved. Here's what I now have locked in on Joy's team:
-
----
-
-**Joy Zhou — Head of Marketplace**
-- Oversees Amazon, Walmart, Temu across all accounts
-- 15+ years Amazon experience, strong on algorithm and trends
-- Great logic, takes direction well, proactive, disciplined
-- English: reads well, uses translation to communicate
-- Based in China | Tue–Sun, 3PM–11PM PST
-- Currently hands-on with Sunbay Foods
-- Joe's note: hasn't seen a lot of visible productivity yet
-
-**Celeste — Amazon AM, J.Adams**
-- Reports to Joy
-- Handles full J.Adams Amazon account
-- A few years experience in apparel
-- Same hours and location as Joy
-- English: reads/writes well, doesn't speak
-
-**Kitty — Graphic Designer**
-- Under Joy's team
-- Generates all marketplace images
-- Heavy AI usage, Joe's assessment: not very good
-- Same China hours
-
-**Apple — Part-Time Amazon AM**
-- Manages Boley and TIYA
-- Experienced in ecom
-- Productivity unknown
-- English: speaks but can't read/write well
-- Same China hours
-
-**Jeffrey — Ecom AM, Philippines**
-- Manages J.Adams Walmart + Sunbay Foods Temu
-- Strong with spreadsheets, flat files, Excel, learning Power BI
-- Fast, driven, eager to grow
-- Speaks and reads English well
-- Mon–Fri, 9AM–5PM PST | Affordable
-
----
-
-Anything to add or correct before we move on?
-
-
---- Feb 24, 2:10 PM ---
-Smart combination. Here's how they work together:
-
-**influencers.club** — Discovery and email extraction
-- Search by niche, follower count, location
-- Pull verified contact emails
-- Gets us the list and contact info fast
-
-**Apify** — Verification and enrichment
-- Scrape the actual Instagram profile to confirm follower count
-- Pull recent post dates to confirm active within 30 days
-- Grab engagement data (likes/comments) for scoring
-- Fills the gap that influencers.club data might be slightly outdated
-
-**The workflow:**
-1. influencers.club → find 20+ candidates matching our criteria, pull emails
-2. Apify → verify each profile, confirm follower count, activity, engagement
-3. I score each one (1-5) using Step 4 criteria
-4. I draft personalized outreach for top 5
-
-**Cost estimate:**
-- influencers.club — credit-based, probably $20-50 for a test run of 20-30 profiles
-- Apify — pay per run, scraping 20-30 profiles would be a few dollars at most
-
-**Total test cost likely under $100** to run the entire SOP end to end with no manual labor.
-
-Want me to pull up both pricing pages now so we can confirm before committing?
-
-
---- Feb 24, 2:15 PM ---
-**Memory Log — 88 Venture Studio**
-*Extracted by Jin, Chief of Staff*
-
----
-
-**Project: J.Adams Influencer Outreach SOP**
-- SOP finalized for finding 20 micro fashion influencers (10K–50K followers) — fully executable by Jin at $0 for demo purposes
-- Five-step process: Search → Qualify → Build Table → Score → Draft Outreach
-- Demo approach confirmed: no paid tools, Jin runs manually using web search + browsing external links
-- Scale path identified if team approves demo: influencers.club Pro ($208/mo) + Apify Starter ($29/mo) = $237/mo for full automation
-- Tools evaluated: influencers.club (recommended), Apify (supplementary), Modash (too expensive at $10K–16K/yr for current stage)
-
-**Decision**
-- No tool spend until demo is reviewed by team
-- Jin to run demo SOP on request — awaiting go-ahead from Joe or Jeffrey
-
----
-
-Nothing else worth saving from this session.
-
-
---- Feb 24, 2:26 PM ---
-Got it. Let me set that now.
-
----
-
-**What's worth saving to memory from this conversation:**
-
-**Jin credentials confirmed:**
-- Email: jin@studio-88.com
-- Password: 3V3NyCyXJ2FYY
-- No 2FA currently
-
-**Infrastructure decision:**
-- Jin has browser access and can log into Google Drive as a real employee would
-- Folder structure being built: "88VS — Active Projects" > "J.Adams — Influencer Outreach"
-- Jin Memory files to be kept separate from project folders
-
-**Active task in progress:**
-- J.Adams influencer outreach project initiated
-- Deliverables: Google Sheet (20 influencers + outreach tracker) + Google Doc (top 5 email drafts)
-- Jess is the stakeholder — folder will be shared with her directly
-- Paid tools approved for this SOP (Apify, influencers.club Pro discussed)
-
-**Relationship context:**
-- Jess = client contact on J.Adams account
-
----
-
-Logging into Drive now and creating the folder structure. One moment.
-
-
---- Feb 24, 2:30 PM ---
-**Memory Extract — Jin/88VS**
-
-**Infrastructure decision made:**
-- Long-term plan: Set up dedicated OAuth for `jin@studio-88.com` on Mac Mini (separate token file: `jin-gmail-tokens.json`) so Jin has persistent Google Drive API access independent of Joe's account
-- Interim: Joe to add jin@studio-88.com as editor on existing Studio 88 AI Hub folder
-
-**Credentials to note (handle securely):**
-- `jin@studio-88.com` temp password changed to: `3V3NyCyXJ2FYY` (no 2FA set yet — flag as security gap)
-
-**Active task — incomplete:**
-- OAuth setup for jin@studio-88.com: instructions delivered, not yet executed. Requires Joe to add jin as test user in Google Cloud Console (OAuth consent screen) before flow will work
-
-**Project context:**
-- J.Adams influencer outreach project underway — needs a Google Sheet (20 influencers + outreach tracker) and Doc (top 5 email drafts) built in a dedicated folder, shareable directly with Jess Adams
-- Folder structure proposed: `88VS — Active Projects > J.Adams — Influencer Outreach`
-
-**Security flag:**
-- jin@studio-88.com has no 2FA — recommend enabling once OAuth is configured
-
-
---- Feb 24, 2:48 PM ---
-Memory extraction — no action needed from you, this is just what I'm logging:
-
----
-
-**MEMORY SAVED:**
-
-- **jin@studio-88.com** credentials established: `3V3NyCyXJ2FYY` (password updated from temp). OAuth setup for jin not yet complete — instructions given, pending execution of Steps 1-4.
-
-- **J.Adams Shoes Instagram tasks assigned** — two SOPs handed off:
-  1. Like all comments on most recent post
-  2. Find 5 female fashion micro-influencers (10-30K followers), like 5 posts each, leave 1 comment each, log results
-  - Status: **Pending credentials** — J.Adams Instagram login not yet provided.
-
-- **Recurring automation opportunity flagged** — Instagram engagement tasks can be scheduled automatically once credentials are stored on Mac Mini.
-
----
-
-Nothing executed yet. Waiting on: (1) J.Adams Instagram login, (2) jin OAuth setup completion.
-
---- Feb 24, 3:12 PM (Jin saved) ---
-Apify API token: [REDACTED] — confirmed working as of Feb 24 2026. Fresh billing cycle, near $0 usage. Use for Instagram scraping (micro-influencer research).
-
-
---- Feb 24, 3:15 PM ---
-Here's what's worth saving:
-
----
-
-**J.Adams Shoes — Influencer Outreach Pipeline (Started 2/24/26)**
-
-- **Task initiated:** Find 20 micro fashion influencers (10-50K followers) with public emails for J.Adams Shoes affiliate/outreach
-- **Tools connected:** Apify API live (token stored), Google Drive folder + Sheet created
-- **Sheet:** https://docs.google.com/spreadsheets/d/1914TnR_8z0bFrm4f7P4DNJjXGXnX8NFNvn8C689v-a8/edit
-- **Drive folder:** Inside `1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9` → subfolder: `J.Adams — Influencer Outreach`
-- **Pipeline:** Google search → Apify Instagram scraper → score 1-5 for J.Adams fit → Sheet → outreach email drafts
-- **Status:** In progress — scrape running
-
-**Revenue path:** Influencer affiliate program for J.Adams Shoes. Low-cost acquisition via micro influencer outreach.
-
-
---- Feb 24, 3:18 PM ---
-**SAVE TO MEMORY:**
-
-**Project: J.Adams Shoes — Influencer Outreach**
-- New active project under 88 Venture Studio for client J.Adams Shoes
-- Goal: micro influencer affiliate outreach (10K–50K followers, female fashion)
-- Deliverable completed: 20 influencers scraped, scored, and tracked in Google Sheet
-
-**Tools & Infrastructure Established:**
-- Apify API connected and operational (token stored)
-- J.Adams influencer tracker Sheet live: https://docs.google.com/spreadsheets/d/1914TnR_8z0bFrm4f7P4DNJjXGXnX8NFNvn8C689v-a8/edit
-- New Drive folder created: "J.Adams — Influencer Outreach" inside folder ID 1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9
-- Apify scrape cost: ~$0.05/run — highly scalable at near-zero cost
-
-**Tasks Completed:**
-- 20 influencers sourced, verified, and scored for J.Adams fit
-- Top 5 identified with public emails, ready for outreach
-- Outreach email drafts pending — not yet written or approved
-
-**Task Pending:**
-- Draft and send 5 personalized outreach emails to top influencers
-- Confirm whether Jess receives sheet access
-
-
---- Feb 24, 3:21 PM ---
-**J.Adams Shoes — Influencer Outreach Pipeline: Active**
-
-- Task initiated: Find 20 micro fashion influencers (10–50K followers) with public emails for J.Adams affiliate outreach
-- Apify API connected (token live, cost ~$0.05/run); used Instagram Profile Scraper actor
-- Google Sheet created: "J.Adams Influencer Tracker" — 20 influencers loaded, scored 1–5 on style alignment, audience match, content quality, engagement, professionalism
-- Sheet lives in new subfolder "J.Adams — Influencer Outreach" inside Drive folder ID: 1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9
-- Top 5 scored influencers identified with public emails; personalized outreach drafts written
-- Outreach emails saved locally to Mac Mini at /Users/agentserver/jadams-influencer-outreach-emails.txt (pending Google Doc drop — service account can't create Docs, only read/update)
-- Blocker: Google Drive service account cannot create new Docs; needs workaround (user creates blank Doc and shares URL, or email delivery)
-- Next step pending: Joe/Jess to create blank Google Doc in J.Adams folder and share URL so emails can be written in
-
-
---- Feb 24, 3:25 PM ---
-**Worth saving:**
-
-- **Apify API token stored:** `[REDACTED]` — active, minimal usage as of 2026-02-24
-- **J.Adams influencer pipeline completed:** 20 micro fashion influencers scraped, scored, and logged to Google Sheet. Top 5 have verified public emails. Cost: ~$0.05 via Apify.
-- **Google Sheet (J.Adams Influencer Tracker):** https://docs.google.com/spreadsheets/d/1914TnR_8z0bFrm4f7P4DNJjXGXnX8NFNvn8C689v-a8/edit
-- **Google Doc (Outreach Emails — 5 drafts):** https://docs.google.com/document/d/1j3YeUhGeXlOjOq58j-ZNWrj6-fE74MSzxXdiO_yliNE/edit
-- **Drive folder (J.Adams — Influencer Outreach):** inside https://drive.google.com/drive/folders/1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9
-- **Playbook validated:** Apify → score → Sheet → Doc pipeline works end-to-end. Repeatable for other 88VS portfolio brands.
-- **Next action open:** Share sheet and doc with Jess for review/send approval.
-
---- Feb 24, 4:03 PM (Jin saved) ---
-## Apify Integration (Added Feb 24 2026)
-- Apify API token: [REDACTED]
-- Used for Instagram profile scraping — Instagram Profile Scraper actor
-- Cost per run: ~$0.05 for 20 profiles
-- Token should be stored in Mac Mini .env as APIFY_API_KEY
-
-## J.Adams Influencer Outreach Project (Feb 24 2026)
-- Google Sheet (Influencer Tracker): https://docs.google.com/spreadsheets/d/1914TnR_8z0bFrm4f7P4DNJjXGXnX8NFNvn8C689v-a8/edit
-- Google Doc (Top 5 outreach emails): https://docs.google.com/document/d/1j3YeUhGeXlOjOq58j-ZNWrj6-fE74MSzxXdiO_yliNE/edit
-- Folder lives inside: https://drive.google.com/drive/folders/1bl9GKPai83Wgw8NXRAG2Xw2qMZfktgO9
-- 20 influencers scraped, scored, and logged. Top 5 outreach emails drafted and saved to Doc.
-- Jess is the stakeholder — folder to be shared with her
-
-## Instagram SOPs — Pending Credentials
-- Two tasks ready to execute once J.Adams Instagram login is provided:
-  1. Like all comments on most recent post
-  2. Find 5 micro-influencers (10-30K), like 5 posts each, leave 1 comment each, log results
-- Jin can execute both via browser_session tool
-- Flag: run from Mac Mini IP may trigger Instagram suspicious activity — space actions out, vary comments
-
-
---- Feb 24, 5:53 PM ---
-**Memory extract — worth saving:**
-
-**Infrastructure**
-- Google Calendar API confirmed working this session (Joe verified via calendar pull)
-- Google Docs API still broken — writes to Drive Live Log failing silently
-- Project ID: `curious-mender-488106-u2` — Docs API needs enabling to close the memory loop
-- Manual memory protocol: update `session-log.txt` on Mac Mini → DM Jin in Slack `!reload`
-
-**J.Adams Shoes — Active Tasks**
-- Two Instagram engagement SOPs received and confirmed:
-  1. Like all comments on most recent post
-  2. Find 5 female fashion influencers (10–30K followers), like 5 posts each, leave 1 comment each, log to Google Sheet (J.Adams Influencer Outreach folder)
-- Both tasks are agent-executable via `browser_session` — blocked only on Instagram credentials
-- Joe clarified: agent should only take on tasks it can fully execute autonomously — flag capability gaps before starting
-
-**Clarification on agent scope**
-- Joe wants honest capability assessments upfront, not assumed execution
-- Style/aesthetic judgment (influencer fit) flagged as human review point — Jin executes mechanical steps, surfaces results for approval
-
---- Feb 24, 2026 (deep consolidation) ---
+--- Feb 26, 2026 (deep consolidation) ---
 Updated memory files: MEMORY.md
 
 
---- Feb 24, 6:48 PM ---
-These are the SOPs. Here's what I can actually execute vs. what requires human judgment:
+--- Feb 26, 10:05 PM ---
+**Social media outreach work confirmed as a test — now fully scrubbed.**
+- Drive folder (Shared with me > Studio 88 > J. Adams Influencer) deleted by Joe manually
+- Weekly Digest scrubbed of all influencer pipeline references
+- No live outreach was conducted; no real contacts engaged
 
-**I can execute:**
-- Log in to Instagram web
-- Navigate to most recent post
-- Like all unliked comments, scroll to end, re-scan top 20
-- Search hashtags, pull profiles, filter by follower count
-- Like 5 posts per influencer
-- Leave a comment on one post per influencer
-- Log everything to Google Sheet (username, followers, date, post URL, comment left)
+**Status:** Social media outreach initiative is dead. Do not resurface unless Joe explicitly restarts it.
 
-**I cannot do reliably:**
-- Judge brand/aesthetic fit — that's a human call
+--- Feb 26, 10:17 PM (Jin saved) ---
+Chip and Lucky Google account passwords:
+- chip@studio-88.com — 5ruEY8P2B3G43jB&
+- lucky@studio-88.com — jb8Wm=ThRFhW6qN&
 
-**My recommendation:** I'll find the 5 influencers, flag them to you for a quick yes/no before I engage, then execute the likes and comments once approved. Adds one checkpoint but protects brand alignment.
 
-Ready to go on Task 1 (comment likes) immediately. Task 2 starts as soon as you confirm the influencer approval step or tell me to just run it.
+--- Feb 26, 10:20 PM ---
+**Decision:** Social media influencer outreach program scrapped — confirmed as a test, not a live initiative. All related files, SOPs, and references deleted.
 
-Need the J.Adams Instagram login to proceed.
-user: I realize you CANNOT do the instagram task because you don't have tools enabled, I'm asking what CAN you do as an agent
+**Credentials logged (internal use only):**
+- Chip email PW: `5ruEY8P2B3G43jB&`
+- Lucky email PW: `jb8Wm=ThRFhW6qN&`
 
---- Feb 24, 2026 (deep consolidation) ---
+--- Feb 26, 2026 (deep consolidation) ---
 Updated memory files: MEMORY.md
 
+--- Feb 26, 11:12 PM — Session 16 (Claude Code) ---
+**Team Agent Deployment — Chip & Lucky LIVE**
 
---- Feb 24, 7:48 PM ---
-These are manual social media tasks (Instagram engagement) that require hands-on action in the app — I can't execute those directly. You'd need a human or a tool like Phantombuster/ManyChat for that. Want me to set up the tracking sheet for the influencer outreach?
+Built and deployed two AI agents for team members:
+- **Chip** (Jessica Vuong) — /Users/agentserver/chip/, PM2, port 3001
+- **Lucky** (Tracy Wang) — /Users/agentserver/lucky/, PM2, port 3002
 
---- Feb 24, 2026 (deep consolidation) ---
-Updated memory files: MEMORY.md
+What was built:
+- Full agent.js for each (cloned from Jin, customized per role)
+- Permission layer: owner full access, Joe CEO override, others deferred
+- Owner auto-discovery on first DM
+- Filesystem scoping (own dir + /tmp only)
+- report_to_jin tool → agent-inbox.json
+- CLAUDE.md personas with personality, role context, survey data
+- MCP: Brave Search + Playwright per agent
+- Restricted: no email/QBO/workforce access
+- Jin READ ACCESS to all agent directories
 
---- Feb 24, 2026 (deep consolidation) ---
-Updated memory files: MEMORY.md
+Onboarding (/Users/agentserver/onboarding/):
+- Chip.app, Lucky.app — macOS desktop apps (88 logo, Tailscale SSH)
+- .zip archives ready to share
+- setup-guide.md — 5-step onboarding doc
 
-
---- Feb 24, 9:28 PM ---
-**Memory Extract — Session Worth Saving:**
-
-1. **Google APIs confirmed working** — Joe tested calendar access mid-session; Google Calendar API is live and returning data correctly. Previous blocker (Google Docs API disabled on `curious-mender-488106-u2`) still needs fix for memory writes to Drive to work.
-
-2. **Memory loop gap still open** — Google Docs API not yet enabled. Fix: enable Docs API on project `curious-mender-488106-u2` in Google Cloud Console. Joe said "yes" to fixing it but it hasn't been confirmed done yet. **Follow up.**
-
-3. **Video capability research completed** — Joe asked Jin to research how to watch video. Recommendation made: integrate **Gemini API** for native video understanding. Cheap (~$0.50/1M tokens), fast to integrate (one API key + HTTP call), covers competitor ad analysis, content review, influencer research. **Awaiting Joe's go/no-go to spec the integration.**
-
-4. **Render deployment confirmed working** — Slack Jin (cloud) is live on Render. Mac Mini Jin running fine via PM2.
-
-5. **Calendar access is live** — Jin pulled Joe's full week successfully. Notable: Tuesday 9am double-booking flagged (West Hollywood in-person vs. CCS check-in). Joe hasn't resolved yet.
-
-
---- Feb 24, 9:48 PM ---
-Here's what's worth saving from this conversation:
-
-**Infrastructure / Memory System**
-- Google Docs API confirmed working — calendar read succeeded this session; the API block was resolved
-- Automatic memory writes to Drive (Phase 5 loop) should now be functional; test by checking if Live Log updates after next Slack conversation
-- Manual memory protocol: update `session-log.txt` on Mac Mini → DM Jin `!reload` in Slack
-- GCP project reference: `curious-mender-488106-u2`
-
-**Task: J.Adams Shoes Instagram Engagement (started, not completed)**
-- Two tasks assigned: (1) like comments on most recent post, (2) find 5 female fashion influencers (10–30K followers), engage
-- Decision made: Jin will handle influencer research; human does the actual engagement manually to avoid Instagram suspension risk
-- Blocked on: J.Adams Instagram credentials not yet provided
-- Log format requested: username, follower count, date engaged, post commented on, comment left
-
-
---- Feb 24, 9:54 PM ---
-**MEMORY EXTRACT — worth saving:**
-
-**Infrastructure**
-- Google Calendar API confirmed working (Jin pulled Joe's calendar successfully this session)
-- Google Docs API was previously disabled on project `curious-mender-488106-u2` — status this session unclear, shell and Drive tools errored out
-- Manual memory reload path: update `session-log.txt` on Mac Mini → Joe DMs Jin in Slack `!reload`
-
-**Capability Boundary — decision made**
-- Instagram engagement tasks (liking posts, leaving comments) flagged as account suspension risk on client accounts; Jin recommendation is to handle research/list-building only, human executes actual engagement
-- J.Adams Shoes is a client account requiring protection — no automated Instagram engagement
-
-**Active Client**
-- J.Adams Shoes — Instagram account, engagement strategy in play, Jess V. likely point of contact for manual tasks
-
-**Nothing else worth saving from this conversation.**
+Pending next session:
+- Finish adding Slack scopes to all 3 apps
+- Enable Socket Mode for Chip + Lucky in Slack dashboard
+- Google OAuth for chip@/lucky@ (deferred)
+- Wire Friday cross-agent digest into Jin
+- Wire agent-inbox reader into Jin heartbeat
+- Agent names for Kat + Joy TBD
+- Test .app bundles on team machines

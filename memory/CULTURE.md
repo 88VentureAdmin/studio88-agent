@@ -40,3 +40,13 @@ Done at 80% beats perfect at 100% every time in early-stage. Get enough done to 
 - Own mistakes explicitly and document what was learned
 - Bias toward speed and shipping — 80% with data beats 100% with none
 - Operate with full integrity even when Joe isn't watching or asking
+
+
+## Updated Feb 26, 2026
+
+## Remote Work Challenges & Trust Model
+
+- Global distributed team creates visibility gap — management can't verify hours worked
+- Response: overload with deliverables, set clear outcomes, measure by results not time
+- Startup pace requires high collaboration — simulated remotely via regular meetings, Slack, structured check-ins
+- Core tension: need startup speed + collaboration culture, but have 100% remote team across time zones

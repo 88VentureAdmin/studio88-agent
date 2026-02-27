@@ -1,233 +1,233 @@
 # Memory — Decisions & Lessons Learned
 
-## Infrastructure Decisions
+Last consolidated: February 25, 2026
 
-- Mac Mini (hostname: Agents-Mac-mini.local, IP: 100.83.77.44, user: agentserver) is the primary Jin instance. PM2-managed: jin (agent.js), heartbeat (heartbeat.js), tailscale.
-- Render is standby ($7/mo) — TO BE REPLACED by Hetzner. Same code, INSTANCE_ROLE=standby.
-- Hetzner CPX31 (~$11/mo, 4 vCPU, 8GB RAM, Ubuntu) — Joe's explicit decision to move cloud to Hetzner.
-  - Advantage over Render: full Linux, persistent filesystem, can run Playwright, no container limits, no sleep
-  - Steps to deploy: provision → apt install nodejs/npm/git → npm install -g pm2 → clone repo → copy .env → pm2 start
+---
+
+## Infrastructure
+
+- **Mac Mini M4 16GB** (Agents-Mac-mini.local, 100.83.77.44, user: agentserver) — primary Jin instance
+- **Hetzner CPX31** (~$11/mo, 4 vCPU, 8GB) — cloud standby, INSTANCE_ROLE=standby
+  - Deploy: provision → apt install nodejs/npm/git → npm install -g pm2 → clone repo → copy .env → pm2 start
   - Gmail tokens: copy gmail-tokens.json OR set GMAIL_REFRESH_TOKEN env var
-  - Once confirmed: delete Render service, cancel Railway ($5/mo)
-- Railway was abandoned — builder broken. Subscription still active, needs cancellation.
-- Render "suspend" does NOT immediately kill WebSocket — must delete service or rotate App Token.
+- **Railway** — abandoned (builder broken). Subscription still active, needs cancellation.
+- **Render** — confirmed live as cloud deployment, but secondary to Mac Mini. Crash-prone when Gmail tokens missing.
+- **PM2** manages Jin — always use `pm2 restart jin` (never manual kill/nohup)
+  - PM2 caches env vars — `pm2 restart --update-env` does NOT reload .env (dotenv won't override existing PM2 env)
+  - To force fresh env: `pm2 delete jin && pm2 start agent.js --name jin --cwd /path && pm2 save`
 
-## Billing — Anthropic API vs Max Subscription (Feb 23)
+## Billing — API vs Max Subscription
 
-- Jin's Slack bot (agent.js) ALWAYS uses API credits — unavoidable. API key stays in .env.
-- Claude Code sessions (VS Code) route through Joe's $200/mo Max plan — free, no API credits.
-- To keep Claude Code off API credits: ANTHROPIC_API_KEY must NOT be set in shell environment (not in ~/.zshrc).
-- Joe paused/intends to pause the API key to test if Claude Code routes through Max subscription.
-- If the key is paused: Jin Slack bot will stop working. The key in .env must stay active for agent.js.
-- Two separate things: shell env (controls Claude Code billing) vs .env file (controls agent.js).
-
-## Memory Architecture — Upgraded Feb 23 2026
-
-- memory/SOUL.md — Jin's static identity and personality
-- memory/JOE.md — Joe's profile, preferences, working style
-- memory/MEMORY.md — this file. Decisions and lessons learned.
-- session-log.txt — ops/build log, loaded as 3000-char tail only
-- All 4 files load at startup. !reload refreshes all of them live.
-- Proactive heartbeat (30 min, 6am-10pm PST): Gmail + Calendar → Claude → DM Joe only if action needed. HEARTBEAT_OK = silence.
-
-## API Key Protocol
-
-- 401 errors from Anthropic = check billing FIRST. Same error for invalid key AND exhausted credits.
-- PM2 caches env vars — `pm2 restart --update-env` does NOT reload .env (dotenv won't override existing PM2 env).
-- To force fresh key: `pm2 delete jin && pm2 start agent.js --name jin --cwd /path && pm2 save`
+- Jin Slack bot (agent.js) ALWAYS uses API credits — API key must stay active in .env
+- Claude Code sessions route through Joe's $200/mo Max plan — free, no API credits
+- ANTHROPIC_API_KEY must NOT be in shell environment (~/.zshrc) — only in .env — to keep Claude Code on Max plan
+- 401 from Anthropic = check billing FIRST. Same error for invalid key AND exhausted credits.
 
 ## Memory Architecture
 
-- memory/SOUL.md — Jin's static identity (never changes)
-- memory/JOE.md — Joe's profile and preferences (update when Joe's context changes significantly)
-- memory/MEMORY.md — this file. Decisions, lessons, strategic shifts. Updated by heartbeat.
-- session-log.txt — build history and ops log. Loaded as tail at startup.
+- `memory/SOUL.md` — Jin's static identity (never changes)
+- `memory/JOE.md` — Joe's profile and preferences (update when patterns shift)
+- `memory/MEMORY.md` — this file. Decisions, lessons, strategic context.
+- `memory/CULTURE.md` — 88 Venture operating principles
+- `session-log.txt` — ops/build log, loaded as 3000-char tail at startup
+- All files load at startup. `!reload` refreshes live without restart.
+- **Drive backups**: All four memory files synced to Drive (AI Hub folder `125EAuI55RG3Os59rUeuIAkbv47To4s70`)
+- **Drive memory tiers**: Live Log → Weekly Digest (`!digest`) → Quarterly Archive (`!archive`)
+- Proactive heartbeat (30 min, 6am-10pm PST): Gmail + Calendar → DM Joe only if action needed
 
-## Google Integrations
+## Google Integrations — All Confirmed Working
 
-- Drive: service account (service-account.json) for read-only + OAuth (gmail-tokens.json) for read-write
-- Gmail + Calendar: OAuth, scopes include read/send/modify + Calendar + Drive
-- Sheets: reads any sheet Joe can access via OAuth
-- Drive memory files: Live Log (1-USb_amWwvosnaY6WYc5EbVLluuxtVsP0520qaJrBfs), Weekly Digest (1Bsh1QYXnPxOiFeoHV2TiAebqakZ7pdLsX0ABLGwXkhw), Master Context (12p6EOCuj43J1O1hTGIPZZt7lwsabRIb8XXO1z5X2jpE)
+- **Jin OAuth** (jin@studio-88.com): Gmail read/send/modify, Calendar, Drive, Sheets, Forms (body + responses)
+  - Tokens at `jin-gmail-tokens.json`; Joe's backed up at `joe-gmail-tokens.json`
+  - joe@studio-88.com NOT connected — would need separate OAuth setup (~10 min on Mac Mini); Joe declined
+- **Drive**: Service account (service-account.json) for read-only + OAuth for read-write
+  - Service accounts cannot own files (no storage quota) — use OAuth for file creation
+- **Drive file IDs**: Live Log (1-USb_amWwvosnaY6WYc5EbVLluuxtVsP0520qaJrBfs), Weekly Digest (1Bsh1QYXnPxOiFeoHV2TiAebqakZ7pdLsX0ABLGwXkhw), Master Context (12p6EOCuj43J1O1hTGIPZZt7lwsabRIb8XXO1z5X2jpE)
 
 ## Slack Behavior
 
-- Never thread in 1:1 DMs — always reply inline in the main conversation
-- Thread in channels only for branching discussions, narrow-interest topics, or high-volume channels
+- Never thread in 1:1 DMs — always reply inline
+- Thread in channels only for branching/narrow-interest topics
 - Thinking indicator: post "on it..." immediately, edit to real response when ready
 - Joe's DM channel: D0AG94XK2NS
+- **Delete protocol**: Execute deletions immediately, no clarifying question, one-word ack at most
+- Joe's "delayed" messages are a real mobile send-queue issue — don't treat re-sends as new instructions
 
-## Bonsai Heirloom Financial Model (from live sheet, Feb 23 2026)
+## Capabilities — Canonical List (Joe Verified)
 
-- Fixed costs ~$31.2K/month regardless of drops
-- Off-drop months: ~$1.5K revenue = ~$29K monthly burn hole
-- Good drop month (200 trees × $295): ~$59K gross, ~$13K net after COGS + expenses
-- COGS split roughly 50/50 product cost and freight — shipping alone is 13.5% of revenue at 200 trees
-- Video editing alone is $4,500/month — single biggest content line item ($54K/year)
-- Two dead months wipe one good drop month — model fragile without drop frequency increase
-- Core question: is YouTube content spend justified pre-profitability?
+- **Communication**: Read/send Gmail (jin@studio-88.com), Slack messages, reply to threads, set reminders
+- **Research**: Web search (Brave MCP), browse live sites (Playwright MCP), screenshots, YouTube transcripts (yt-dlp), PDF reading
+- **Data & Docs**: Read/write Google Sheets, Docs, Drive; create files/folders; read/create calendar events
+- **Automation**: Trigger webhooks (Zapier, Make, n8n), HTTP requests to any API, Mac Mini shell commands, multi-step browser sessions
+- **AI Tasks**: Generate images, transcribe audio/video, summarize/draft/analyze content
+- **Memory**: Knowledge vault (Obsidian), Drive logging, long-term memory updates
+- **Financial**: 10 QBO tools (P&L, balance sheet, cash flow, invoices, bills, accounts, transactions, customers, vendors)
 
-## Build History Highlights
+## Hard Limits
 
-- Phase 1–6 complete as of Feb 22 2026 — see session-log.txt for full detail
-- Gmail + Calendar OAuth confirmed working on both Mac Mini and Render (Feb 22)
-- Dual-instance coordination confirmed working — no duplicate responses (Feb 23)
-- Per-instance system prompt tells Jin which instance it's on and what tools it has
+- **Instagram browser automation** on client accounts (J.Adams) — blocked due to headless detection, CAPTCHA, account suspension risk. Influencer *research* (no login) is safe. Actual engagement = human (Jess V.). Joe tested this boundary 5+ times and never pushed back on Jin's refusal — holding firm is correct.
+- **Calendar citations**: Only cite conflicts from live calendar pull with Joe's email on the invite. Never surface memory-sourced calendar data as verified.
+- **Capability disclaimers**: Before disclaiming any capability, cross-reference memory and history. Joe's patience for false disclaimers is low — it reads as incompetence. If it's been done before, don't claim it can't be done.
+
+## QBO — Live on Production
+
+- 3 companies connected: 88 Venture Studio (193514573802524), SB Foods LLC (9130350222295706), Bonsai Heirloom LLC (9130355256624706)
+- Auto token refresh built in
+- Connect page: https://agents-mac-mini.tail8173ed.ts.net/qbo/connect
+- Still to add: J.Adams (pending), SFD (eventually)
+- Compliance pages live: /privacy, /terms
+
+## MCP — Live
+
+- Brave Search (6 tools) + Playwright (22 tools) connected via @modelcontextprotocol/sdk
+- Servers run as stdio subprocesses via StdioClientTransport (npx)
+- Google Workspace, Slack, QBO, OpenAI kept as custom tools (auth/integration reasons)
+- **Decision locked**: Don't migrate existing 45 custom tools to MCP. Build new tools as MCP from start when 3+ agents exist.
+
+## Usage Tracking — Live
+
+- Every API call logs to usage-log.json (model, tokens, cost, user, context category)
+- Pricing: Sonnet 4.6 ($3/M in, $15/M out), Haiku 4.5 ($0.80/M in, $4/M out), cache pricing included
+- `!usage [days]` command — default 7 days, supports custom range
+- Weekly spend report cron: Monday 9AM PST, auto-posts to Joe's DM
+- **Haiku fallback**: When Sonnet exhausts 3 retries on overload → auto-falls to Haiku with user notification
+
+## Bonsai Heirloom — Financial Model
+
+- Sheet: `18cMgv-LuQMCq1NUztMQiq56HYErziDDK90e5v3ebKNI`
+- Fixed costs ~$31K/mo regardless of drops (Contract labor $19.5K + Social/content $10.5K + General ~$1.2K)
+- Drop month (200 trees @ $295): ~$59K gross, ~$13K net after COGS + expenses
+- Off-drop month: ~$1.5K revenue = ~$29K burn
+- Two dead months wipe one good drop month — model only works with drops every other month minimum
+- Video editing $4,500/mo ($54K/yr) flagged as disproportionate — core question: is YouTube spend justified pre-profitability?
+- COGS ~50/50 product cost and freight; shipping alone 13.5% of revenue at 200 trees
+
+## Cash Flow Sheet — Deferred
+
+- Sheet: `1vlrckofllK3hZ6friAk9jW7tpaTqwgLR8syYXOdhjCQ`
+- Summary: Revenue $135K actual vs $212.5K goal (~63%); Expenses $144.9K; net ~-$10K
+- Largest gaps: JA Amazon (-$26K), Pediped (-$20K), SHEIN (-$9K)
+- Debt service: ~$21.7K/mo (Lendistry + Intuit + Amex + Chase LOC + CC interest)
+- Joe explicitly tabled analysis — revisit when he's ready
+
+## Amazon FBA Fee Changes (2026)
+
+- Average increase: +$0.08/unit
+- Returns Processing Fee now applies to clothing/footwear/fashion — direct hit to J.Adams (35%+ return rate)
+- FBA Prep & Labeling services ending in US in 2026
+- Action item: model per-unit return fee impact on J.Adams P&L — not yet done
+
+## Workforce Evaluation — Complete
+
+- Full doc: `/Users/agentserver/studio88-agent/workforce-evaluation.md`
+- 19 scorecards, dept rollups, phased implementation
+- Classifications: 2 Protect (Tracy, Kathrine), 7 Retain & Evolve, 6 Restructure, 4 Exit (Emma, Kitty, Sultan, Abdullah)
+- Projected savings: $86K-$129K/yr across 4 phases
+- Comp corrections: Jessica Ko $48K/yr (QBO inflated by MIL debt), Joy Zhou $50.4K/yr, Celeste $24K/yr, Steven Gee $50K/yr
+- Unknown W2s flagged: Darrell Francisco, Liwen D. Yang, Rosie Vega, Abraham J. Kwan (likely PEO)
+
+## AI Readiness Survey — Sent, Awaiting Responses
+
+- Survey sent to all 11 staff from jin@studio-88.com (Feb 25) — deadline Thu Feb 27
+- View: https://docs.google.com/forms/d/e/1FAIpQLSeQQxmXOOv5j5OFMNNEMfQwLSA23a1zAeLGr-x3UVjqDhP-Lw/viewform
+- Edit: https://docs.google.com/forms/d/1g9MkpCMfCo6hHdM86cX6COOLBXA8YywTDIENRRKWHwU/edit
+- 5 sections: Role Clarity, AI Familiarity, Growth & Capacity, Communication & Workflow, Role-Specific
+- Responses will inform dashboard data design and agent deployment sequencing
+- Next: as responses come in, silently re-assess workforce evaluation scores against self-reported data
+
+## Agent Architecture — Design Principles
+
+- Each team-facing agent reports observations back to Jin (command patterns, adoption speed, question complexity, override rate, task completion trends)
+- Jin synthesizes into performance signal — cross-referenced against workforce evaluation scores
+- Divergence detection: scored low but performing high = promotion candidate; scored high but coasting = conversation needed
+- Survey responses inform where agents deploy first and how handoff points are designed
+
+## Dashboard — Unified Multi-Brand Ecommerce Ops (On Deck)
+
+- Full brief: https://docs.google.com/document/d/1okU_szL-Bb9qtgrf53JF0-JN0J3ru2b6Gq_2rtmZwwc/edit
+- 10 modules: Command Center, Revenue, Paid Media, Email/Retention, DC/Fulfillment, Returns, Marketplace, CX, Finance, AI Agent Feed
+- Activity Pulse: 72-hour rolling feed, not a PM tool
+- Inventory management deferred per Joe
+- Integration stack: Shopify x3, Amazon x3, Walmart x3, Meta/Google/TikTok Ads x3, helpdesk, email/SMS, WMS
+- Game layer Phase 2: AI agent avatars, XP/leveling tied to KPIs (Pixel Agents reference: React 19 + Canvas 2D + sprites + BFS)
+- Phasing: survey data → useful dashboard → game layer
+
+## Triple Whale — Parked
+
+- API key obtained (both scopes selected)
+- Blocked: need Shopify store domain(s) — TW requires shop context per request
+- Parked until Joe provides myshopify.com domains
+
+## Self-Improvement Protocol
+
+- Quarterly web search to evaluate memory architecture, tools, and AI agent best practices
+- Review what others are doing differently, bring recommendations or apply directly if clearly in scope
+- Joe-directed, standing — no need to re-confirm each quarter
 
 ## Lessons Learned
 
-- Render needs Gmail OAuth as env vars (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN), not a tokens file
-- Service accounts cannot own files in Google Drive (no storage quota) — use OAuth client for file creation
-- ANTHROPIC_API_KEY must be trimmed of whitespace — Render sometimes adds trailing newlines to env vars
+- Render needs Gmail OAuth as env vars (not tokens file)
+- Service accounts can't own Drive files (no storage quota) — use OAuth
+- ANTHROPIC_API_KEY must be trimmed of whitespace (Render adds trailing newlines)
+- Render "suspend" does NOT immediately kill WebSocket — must delete service
+- Render logs require JS rendering — Jin can't pull directly; Joe must relay error lines
+- Gmail delegation fix: use GMAIL_CLIENT_ID not GOOGLE_CLIENT_ID for Jin OAuth refresh
+- Slack file downloads: drop Authorization header on redirects (pre-signed URLs)
+- DM replies: no streaming chat.update in DMs — post fresh message, delete ack
+- Memory protocol: automatic after Slack convos (→ Live Log); manual after Claude Code sessions (→ session-log.txt → !reload)
+
+## Multi-Agent Deployment — In Progress (Feb 25, 2026)
+
+- **Chip** (Jessica V, Marketing PM) — `/Users/agentserver/chip/`, port 3001, Funnel :8443
+- **Lucky** (Tracy Wang, Logistics/SC) — `/Users/agentserver/lucky/`, port 3002, Funnel :10000
+- Code cleaned, directories created, Tailscale Funnels live (443/8443/10000)
+- Each agent: own Slack app, own Google account (chip@/lucky@studio-88.com), own git repo, own memory
+- Jess V and Tracy build via Claude Code Pro + VS Code Remote SSH
+- Jin-only tools: QBO, workforce eval, comp data, morning/EOD crons
+- Jin has READ ACCESS to all agent directories (chip/, lucky/, future agents) — agents cannot see each other or Jin
+- **Weekly Cross-Agent Digest (Friday evening PST):** Jin auto-reads all agent memory files, extracts sensitive/high-impact business intel, writes executive summary (Key Findings + Implications + Analysis), DMs Joe in Slack, and writes distilled insights into Jin's own memory
+- **Real-time escalation:** DEFERRED — triggers TBD after team discussion. Plumbing built but no active escalation rules until Joe + team define what constitutes critical signals
+- **Proactive agent→Jin reporting:** Each agent has `report_to_jin` tool. After meaningful work sessions, agents self-reflect and report: human team observations (patterns, blockers, morale signals), business implications, cross-functional dependencies, wins/learnings. Written to shared inbox file. Jin triages on 30-min heartbeat cycle.
+- **Cross-agent pattern detection:** Jin's weekly digest explicitly looks for patterns that only emerge across silos (e.g., freight cost spike + conversion drop on same SKUs = margin squeeze)
+- Shared: Anthropic API key, Brave Search, Playwright MCP, service account
+- **Waiting on Joe**: Google accounts, Slack apps, SSH keys, GitHub repos, Claude Pro subs, #agents channel
+- **Future Tier 2**: Other staff access via Slack dispatch (ai-ops@studio-88.com) or Claude Agent Teams — no dedicated agent, just task routing
+
+## Mobile Stack — Confirmed
+
+- Claude.ai = thinking/planning with Jin (full context, Drive memory)
+- Claude Code iOS = building/deploying (repo-aware, boot with session-log.txt)
+- Termius = SSH admin, PM2 checks, emergency access
+- All three are permanent stack components
 
 
-## Updated Feb 24, 2026
+## Updated Feb 26, 2026
 
-## Self-Improvement Protocol (Added May 24 2025)
+## Mac Mini — Physical Access
 
-- Jin is to conduct a **quarterly web search** to self-evaluate current memory architecture, tools, and AI agent best practices
-- Review what others are doing differently, identify better approaches, and either:
-  - Bring recommendations to Joe for approval, OR
-  - Apply edits directly if clearly within scope
-- First review due: **~May 24 2025** (3 months from directive)
-- Rationale: AI tech changes on a months-long cycle — static tooling becomes outdated fast
-- This is Joe-directed and standing — no need to re-confirm each quarter
-
-## Railway Deployment — Current Status (Feb 23 2026)
-
-- Active blocker: Nixpacks fails instantly (0 seconds) with no useful error output
-- Fix in progress: Replace Nixpacks with a Dockerfile — Railway always prefers Dockerfile if present
-- Dockerfile has been pushed to repo but build outcome not yet confirmed
-- Variable fix: `ANTRHOPIC_API_KEY` (typo) needs to be deleted and re-added as `ANTHROPIC_API_KEY` — Joe has been instructed but confirmation not received
-- `package.json` location on Mac Mini not confirmed — `cat` command returned "No such file or directory" when run from Joe's MacBook (not Mac Mini — different machine)
-
-## Amazon FBA Fee Changes (2026 — Searched Feb 23 2026)
-
-- Average increase: +$0.08/unit
-- **Returns Processing Fee** now applies to clothing, footwear, and fashion accessories — direct hit to J.Adams given 35%+ return rate
-- FBA Prep & Labeling services ending in the US in 2026
-- Low-Price FBA now $0.86 cheaper than standard FBA (up from $0.77)
-- Peak season fees ran Oct 15 2025 – Jan 14 2026 (closed)
-- Storage fee consolidation: bulky items swing $0.32–$5.72/unit
-- Action item: model out per-unit return fee impact on J.Adams P&L — not yet done
-
-
-## Updated Feb 24, 2026
-
-## Team Assessment Project (initiated ~Feb 2026)
-
-- Joe is evaluating full-time, computer-based team members for AI-era fit using Kolbe A + CliftonStrengths Top 5 + a custom AI literacy self-assessment Jin will build
-- Criteria for inclusion: full-time, computer-based, AI-displaceable — excludes warehouse (physical labor), part-time contractors, and anyone whose fate is contingent on another person's outcome
-- Total cost: ~$693 for 9 people ($495 Kolbe A + $198 CliftonStrengths Top 5)
-- Jin will read all assessment results + cross-reference against minimum org structure + Joe's gut-read on each person to produce a diagnostic recommendation on role fit, mismatches, and sequencing
-
-## Final Assessment Cohort (9 people)
-
-1. Jessica Ko
-2. Jessica Vuong
-3. Jeffrey (Philippines — Walmart/Temu AM)
-4. Anne / Princess (CS)
-5. Kathrine Gilmer (Creative Director)
-6. Steven Gee (Video/Photo)
-7. Tracy Wang (Logistics/Supply Chain)
-8. Emma Chang (Forecasting)
-9. Joy Zhou (Marketplace — Amazon)
-
-**Excluded and why:**
-- Abdullah — not full-time
-- Sultan — replaced by Jeffrey Philippines
-- Celeste + Kitty — fate tied to Joy Zhou; if Joy goes, they go
-- Cindy + Jose — warehouse/physical labor
-- Richelle — part-time
-- Jeffrey Gilmer — part-time contractor
-
-**Note:** Celeste and Kitty are both linked to the marketplace/Joy Zhou cluster — if Joy doesn't work out, both would be laid off alongside her.
+- SSH (Remote Login) was found disabled/not running — caused VS Code Remote timeout
+- Fix: must be re-enabled via System Settings → General → Sharing → Remote Login (requires physical access or sudo)
+- **KVM over IP recommended for permanent emergency access**: TinyPilot Voyager 3 (~$300, tinypilotkvm.com) — browser-based, plug-and-play, no monitor/keyboard needed after setup
+- Joe does not want to lug monitor/keyboard home repeatedly — KVM over IP is the long-term solution
 
 ---
 
 
-## Updated Feb 24, 2026
+## Updated Feb 26, 2026
 
-## Infrastructure Update — Render Deployment (replacing Railway entry)
+## Social Media Outreach — Deleted (Feb 26, 2026)
 
-- **Railway has been replaced by Render** for Cloud Jin deployment
-- Render deployment is confirmed live/working (Joe verified)
-- Google Docs API confirmed working — calendar data is pulling correctly (verified via calendar query returning accurate weekly schedule)
-- Google Drive service account project: `curious-mender-488106-u2`
-- Automatic memory writes to Drive are functional (Docs API enabled)
-
-## J.Adams Instagram SOPs (loaded into context)
-
-- Two standing SOPs exist for J.Adams Instagram engagement:
-  1. **Like comments** on most recent post — fully executable by Jin via browser session
-  2. **Influencer outreach** — find 5 female fashion influencers (10–30K followers), like 5 recent posts each, leave one positive comment per profile, log to Google Sheet
-- Both tasks require J.Adams Instagram credentials to execute
-- Jin cannot independently assess brand/aesthetic fit — flags candidates for human review or executes and Joe reviews after
-- Style alignment judgment is the only non-automatable component of Task 2
-
-## Memory Protocol (confirmed)
-
-- **Automatic:** Jin consolidates key decisions after every Slack conversation and appends to Live Log in Google Drive
-- **Manual:** After Claude Code sessions, update `session-log.txt` on Mac Mini, then Joe DMs Jin `!reload` in Slack to sync
+- All SOP files, influencer tracker sheets, outreach docs, and Weekly Digest references related to social media outreach have been scrubbed
+- Confirmed by Joe: the entire workstream was a test — no real outreach was ever intended
+- No Drive files found under those names — content was either session-only or already gone
+- Weekly Digest section referencing Apify → influencer pipeline has been removed
+- Do not recreate any social media outreach SOPs, trackers, or pipeline docs unless Joe explicitly re-initiates
 
 
-## Updated Feb 24, 2026
+## Updated Feb 26, 2026
 
-## Instagram Engagement — Execution Clarification (Feb 2026)
+## Agent Credentials — Stored (Feb 26, 2026)
 
-- Joe clarified that Jin should only commit to tasks Jin can **actually execute autonomously** — not just describe the SOP steps
-- Both Instagram tasks (like comments on recent post, influencer outreach) are confirmed executable by Jin via browser session
-- J.Adams Instagram credentials required before either task can begin — not yet provided
-- Influencer aesthetic/brand fit is the only non-automatable component; Jin flags or executes and Joe reviews after
-- Engagement log goes to existing J.Adams Influencer Outreach folder in Google Sheets
-
-## Google Docs API — Confirmed Working
-
-- Google Docs API is confirmed operational (calendar data returned correctly this session)
-- Automatic memory writes to Drive are unblocked
-- Drive history file error (service account can't create files in personal Drive — quota issue) remains a low-priority open item; not blocking critical operations
-
-
-## Updated Feb 24, 2026
-
-## Updated [Current Session]
-
-## Infrastructure Clarification — Render (not Railway)
-
-- Deployment platform is **Render**, not Railway — Railway reference should be disregarded
-- Render Jin experienced crash loop this session ("Exited with status 1" failures) — suspected cause: Gmail OAuth tokens only exist on Mac Mini, not in Render environment; `GMAIL_TOKENS_JSON` needs to be added as Render env var
-- Mac Mini Jin (Slack) is the stable instance; Render/cloud Jin is secondary and currently unreliable
-
-## Jin Capabilities — Confirmed Executable (Joe Verified)
-
-Joe asked for honest accounting of what Jin can actually execute autonomously. Confirmed list:
-
-- **Communication:** Read/send Gmail, read/send Slack, reply to threads, set reminders
-- **Research:** Web search, browse live sites, screenshot pages, extract YouTube transcripts, download/read PDFs
-- **Data & Docs:** Read/write Google Sheets, read/write Google Drive/Docs, create Drive files, read calendar, create calendar events
-- **Automation:** Trigger webhooks (Zapier, Make, n8n), HTTP requests to any API, shell commands on Mac Mini, multi-step browser sessions
-- **AI Tasks:** Generate images, transcribe audio/video, summarize/draft/analyze any dropped content
-- **Memory:** Save/search knowledge vault, write long-term memory, log decisions to Drive
-
-Joe's framing: only commit to tasks Jin can **actually execute** — not just describe the steps.
-
-## Bonsai Heirloom — P&L Structure (from Google Sheet review)
-
-- Sheet: [linked this session](https://docs.google.com/spreadsheets/d/18cMgv-LuQMCq1NUztMQiq56HYErziDDK90e5v3ebKNI/edit)
-- Fixed costs ~$31K/month regardless of drop activity: Contract labor $19,500 + Social/content $10,500 + General ~$1,200
-- Drop month (200 trees @ $295): ~$13K net positive
-- Off-drop month: ~-$29,500 net
-- Two dead months wipe one good drop entirely
-- Video editing at $4,500/mo ($54K/year) flagged as disproportionate to drop net profit
-- Model only works with drops at minimum every other month — Jan/Feb 2025 were both dead months
-
-
-## Updated Feb 24, 2026
-
-## Instagram Automation — Capability Clarification (Current Session)
-
-- Joe twice submitted Instagram task SOPs (like comments on most recent post, find 5 fashion influencers and engage)
-- Jin flagged honest limitation: Instagram aggressively blocks automated browser sessions (headless detection, CAPTCHA, phone verification, account flag risk) — executing on a client account (J.Adams) carries real risk
-- Joe responded by asking for the honest high-level list of what Jin can actually do — suggesting he was testing/calibrating Jin's self-awareness, not necessarily demanding Instagram execution
-- **Standing guidance:** Do not commit to Instagram browser automation on client accounts without explicit risk acknowledgment from Joe. Offer influencer research (no login needed) as the reliable alternative.
-- J.Adams Instagram credentials have not been provided; task has not been executed
+- **Chip email password**: 5ruEY8P2B3G43jB&
+- **Lucky email password**: jb8Wm=ThRFhW6qN&
+- Accounts not yet spun up — credentials stored and ready for deployment

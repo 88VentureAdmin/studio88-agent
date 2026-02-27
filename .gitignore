@@ -6,3 +6,10 @@ node_modules/
 conversation-history.json
 tailscaled.state
 gmail-tokens.json
+*-gmail-tokens.json
+*.crt
+*.key
+heartbeat-state.json
+usage-log.json
+.vscode/
+.claude/settings.local.json

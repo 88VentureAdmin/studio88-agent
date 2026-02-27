@@ -18,9 +18,78 @@ const mammoth = require('mammoth');
 const https = require('https');
 const http = require('http');
 const { execSync, spawn } = require('child_process');
-const { chromium } = require('playwright');
+// playwright import removed — browser automation now handled by Playwright MCP server
 const { YoutubeTranscript } = require('youtube-transcript');
 const pdfParse = require('pdf-parse');
+const { Client: MCPClient } = require('@modelcontextprotocol/sdk/client/index.js');
+const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
+
+// ─── MCP Server Configuration ────────────────────────────────────────────────
+
+const MCP_SERVERS = [
+  {
+    name: 'brave-search',
+    command: 'npx',
+    args: ['-y', '@brave/brave-search-mcp-server'],
+    env: { BRAVE_API_KEY: process.env.BRAVE_SEARCH_API_KEY },
+  },
+  {
+    name: 'playwright',
+    command: 'npx',
+    args: ['-y', '@playwright/mcp', '--headless'],
+  },
+];
+
+// MCP client instances and tool registry (populated at startup)
+const mcpClients = new Map();    // serverName → MCPClient
+const mcpToolMap = new Map();    // toolName → serverName
+let mcpTools = [];               // Anthropic-format tool definitions from MCP servers
+
+async function connectMCPServers() {
+  for (const server of MCP_SERVERS) {
+    try {
+      const transport = new StdioClientTransport({
+        command: server.command,
+        args: server.args,
+        env: { ...process.env, ...(server.env || {}) },
+      });
+      const client = new MCPClient(
+        { name: 'jin', version: '1.0.0' },
+        { capabilities: {} }
+      );
+      await client.connect(transport);
+
+      // Fetch tools from this server
+      const { tools } = await client.listTools();
+      for (const tool of tools) {
+        const anthropicTool = {
+          name: tool.name,
+          description: tool.description || '',
+          input_schema: tool.inputSchema,
+        };
+        mcpTools.push(anthropicTool);
+        mcpToolMap.set(tool.name, server.name);
+      }
+      mcpClients.set(server.name, client);
+      console.log(`  ✓ MCP: ${server.name} connected (${tools.length} tools)`);
+    } catch (err) {
+      console.error(`  ✗ MCP: ${server.name} failed: ${err.message}`);
+    }
+  }
+}
+
+async function callMCPTool(toolName, input) {
+  const serverName = mcpToolMap.get(toolName);
+  if (!serverName) return `Unknown MCP tool: ${toolName}`;
+  const client = mcpClients.get(serverName);
+  if (!client) return `MCP server ${serverName} not connected`;
+  const result = await client.callTool({ name: toolName, arguments: input });
+  // MCP returns { content: [{ type: 'text', text: '...' }, ...] }
+  if (result.content && Array.isArray(result.content)) {
+    return result.content.map(c => c.text || JSON.stringify(c)).join('\n');
+  }
+  return JSON.stringify(result);
+}
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +130,7 @@ const MEMORY_BACKUP_FILES = {
 };
 
 const HEARTBEAT_DRIVE_FILENAME = 'jin-heartbeat.json';
-const HEARTBEAT_STALENESS_MS = 30 * 60 * 1000; // 30 minutes — Render only activates after Mac Mini has been silent this long
+const HEARTBEAT_STALENESS_MS = 30 * 60 * 1000; // 30 minutes — Hetzner standby only activates after Mac Mini has been silent this long
 let heartbeatFileId = null; // cached at first check
 
 const GMAIL_TOKENS_PATH = './gmail-tokens.json';
@@ -125,7 +194,7 @@ function getDriveClientOAuth() {
   return google.drive({ version: 'v3', auth: getOAuthClient() });
 }
 
-// Strip leading language hints (e.g. "json\n") that Render sometimes prepends to env var values
+// Strip leading language hints (e.g. "json\n") that some hosting envs prepend to env var values
 function parseEnvJson(val) {
   return JSON.parse(val.replace(/^[a-zA-Z]+\s*\n/, '').trim());
 }
@@ -639,13 +708,14 @@ async function loadMemoryContext() {
 // ─── Image Support ────────────────────────────────────────────────────────────
 
 // Download a private Slack file and return { base64, mimeType }
-async function downloadSlackFile(url, botToken) {
+async function downloadSlackFile(url, botToken, useAuth = true) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
-    const req = lib.get(url, { headers: { Authorization: `Bearer ${botToken}` } }, (res) => {
-      // Follow redirects
+    const headers = useAuth ? { Authorization: `Bearer ${botToken}` } : {};
+    const req = lib.get(url, { headers }, (res) => {
+      // Follow redirects — drop auth header since redirect URLs are pre-signed
       if (res.statusCode === 301 || res.statusCode === 302) {
-        return downloadSlackFile(res.headers.location, botToken).then(resolve).catch(reject);
+        return downloadSlackFile(res.headers.location, botToken, false).then(resolve).catch(reject);
       }
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
@@ -792,23 +862,27 @@ async function buildUserContent(text, files, botToken) {
   const contentBlocks = [];
   let historyText = text || '';
 
-  // Process images from Slack file attachments
-  const imageFiles = (files || []).filter(
-    (f) => f.mimetype?.startsWith('image/') && f.url_private_download
-  );
+  // Process file attachments from Slack
+  const allFiles = (files || []).filter((f) => f.url_private_download);
 
-  for (const file of imageFiles) {
-    try {
-      const { base64, mimeType } = await downloadSlackFile(file.url_private_download, botToken);
-      contentBlocks.push({
-        type: 'image',
-        source: { type: 'base64', media_type: mimeType, data: base64 },
-      });
-      historyText += historyText ? ` [+ image: ${file.name || 'screenshot'}]` : `[image: ${file.name || 'screenshot'}]`;
-      console.log(`  ✓ Image loaded: ${file.name || file.id}`);
-    } catch (err) {
-      console.warn(`  ✗ Failed to load image: ${err.message}`);
+  for (const file of allFiles) {
+    const isImage = file.mimetype?.startsWith('image/');
+    if (isImage) {
+      try {
+        const { base64, mimeType } = await downloadSlackFile(file.url_private_download, botToken);
+        contentBlocks.push({
+          type: 'image',
+          source: { type: 'base64', media_type: mimeType, data: base64 },
+        });
+        console.log(`  ✓ Image loaded: ${file.name || file.id}`);
+      } catch (err) {
+        console.warn(`  ✗ Failed to load image: ${err.message}`);
+      }
     }
+    // Always include file metadata so Jin can reference the file in tool calls
+    // (e.g. upload_slack_file_to_drive). Include file ID so the tool can look up the real URL.
+    const fileMeta = `[Slack file: id="${file.id}", name="${file.name || 'file'}", type="${file.mimetype || 'unknown'}"]`;
+    historyText += historyText ? ` ${fileMeta}` : fileMeta;
   }
 
   // Process URLs in text
@@ -871,6 +945,19 @@ const TOOLS = [
         folder_id: { type: 'string', description: 'Parent folder ID (default: AI Hub folder)' },
       },
       required: ['name'],
+    },
+  },
+  {
+    name: 'upload_slack_file_to_drive',
+    description: 'Download a file from Slack (image, PDF, etc.) and upload it to Google Drive. Use when a user shares a file in Slack and you need to save or share it via Drive link. Use the exact slack_file_id from the [Slack file: ...] metadata in the message — never guess or construct a file ID.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        slack_file_id: { type: 'string', description: 'The Slack file ID (e.g. "F0AH22XL5GD") from the [Slack file: ...] metadata' },
+        filename: { type: 'string', description: 'Name for the file in Drive (e.g. "screenshot.png")' },
+        folder_id: { type: 'string', description: 'Parent folder ID (default: AI Hub folder)' },
+      },
+      required: ['slack_file_id', 'filename'],
     },
   },
   {
@@ -947,42 +1034,8 @@ const TOOLS = [
       required: ['url_or_id'],
     },
   },
-  {
-    name: 'web_search',
-    description: 'Search the web using Brave Search. Use for researching competitors, suppliers, market trends, brand ideas, or anything you need to look up.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'Search query' },
-        count: { type: 'number', description: 'Number of results (default 5, max 20)' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'browse_web',
-    description: 'Browse a webpage using a real browser (Playwright). Handles JavaScript-rendered pages, SPAs, and dynamic content. Returns the page text content. Use this when regular URL fetching fails or you need to interact with a modern website.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: 'URL to browse' },
-        wait_seconds: { type: 'number', description: 'Seconds to wait for page to load (default 3, max 15)' },
-      },
-      required: ['url'],
-    },
-  },
-  {
-    name: 'screenshot_webpage',
-    description: 'Take a screenshot of a webpage. Returns the screenshot as a file path that can be shared. Use for visual checks of brand sites, competitor pages, or design review.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: 'URL to screenshot' },
-        full_page: { type: 'boolean', description: 'Capture full scrollable page (default false, captures viewport only)' },
-      },
-      required: ['url'],
-    },
-  },
+  // web_search, browse_web, screenshot_webpage removed — now provided by MCP servers
+  // (Brave Search MCP for web search, Playwright MCP for browsing/screenshots)
   {
     name: 'get_youtube_transcript',
     description: 'Extract the transcript/captions from a YouTube video. Use for analyzing competitor ads, product reviews, training videos, or any YouTube content.',
@@ -1113,6 +1166,17 @@ const TOOLS = [
         email: { type: 'string', description: 'Email address to share with (omit for link sharing only)' },
         role: { type: 'string', enum: ['reader', 'writer', 'commenter'], description: 'Permission role (default: reader)' },
         anyone_with_link: { type: 'boolean', description: 'If true, anyone with the link can access (default false)' },
+      },
+      required: ['file_id'],
+    },
+  },
+  {
+    name: 'delete_drive_file',
+    description: 'Delete (trash) a file or folder in Google Drive.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'File or folder ID to delete' },
       },
       required: ['file_id'],
     },
@@ -1265,27 +1329,7 @@ const TOOLS = [
       required: ['channel', 'thread_ts'],
     },
   },
-  {
-    name: 'browser_session',
-    description: 'Start or continue an interactive browser session. Allows multi-step web interactions: navigate, click, type, select, scroll, extract data, and take screenshots. Use for filling forms, logging into sites, navigating multi-page flows, scraping structured data, or any task that requires real browser interaction. Each action returns the result and you can chain actions in sequence.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        session_id: { type: 'string', description: 'Session ID to continue an existing session. Omit to start a new session.' },
-        action: {
-          type: 'string',
-          enum: ['goto', 'click', 'type', 'select', 'scroll', 'extract', 'screenshot', 'wait', 'back', 'close'],
-          description: 'Action to perform: goto (navigate to URL), click (click element), type (type into input), select (choose dropdown option), scroll (scroll page), extract (get text/data from elements), screenshot (capture current page), wait (wait for element/time), back (go back), close (end session)',
-        },
-        url: { type: 'string', description: 'URL to navigate to (for goto action)' },
-        selector: { type: 'string', description: 'CSS selector for the target element (for click, type, select, extract, wait actions)' },
-        text: { type: 'string', description: 'Text to type (for type action) or option value (for select action)' },
-        direction: { type: 'string', enum: ['up', 'down'], description: 'Scroll direction (for scroll action, default down)' },
-        wait_seconds: { type: 'number', description: 'Seconds to wait (for wait action without selector, or timeout for wait with selector). Max 15.' },
-      },
-      required: ['action'],
-    },
-  },
+  // browser_session removed — now provided by Playwright MCP server
   {
     name: 'run_shell',
     description: 'Execute a shell command on the Mac Mini server. Use for system tasks like checking disk space, managing files, running scripts, installing packages, checking processes, or any terminal operation. Commands run as the agentserver user.',
@@ -1413,39 +1457,62 @@ const TOOLS = [
       required: ['file_path'],
     },
   },
+  // ─── Slack Operations ───────────────────────────────────────────────────────
+  {
+    name: 'delete_slack_message',
+    description: 'Delete one of Jin\'s own Slack messages. Use to clean up conversation logs — delete messy, duplicate, or looping responses. Cannot delete other users\' messages.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: { type: 'string', description: 'Channel or DM ID where the message is' },
+        timestamp: { type: 'string', description: 'Message timestamp (ts) to delete' },
+      },
+      required: ['channel', 'timestamp'],
+    },
+  },
+  {
+    name: 'list_slack_messages',
+    description: 'List recent messages in a Slack channel or DM. Returns message text, timestamps, and user IDs. Use to review conversation history for cleanup, reference, or context.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: { type: 'string', description: 'Channel or DM ID' },
+        limit: { type: 'number', description: 'Number of messages to fetch (default 50, max 200)' },
+        oldest: { type: 'string', description: 'Only messages after this Unix timestamp' },
+        latest: { type: 'string', description: 'Only messages before this Unix timestamp' },
+      },
+      required: ['channel'],
+    },
+  },
+  {
+    name: 'react_to_message',
+    description: 'Add an emoji reaction to a Slack message. Use for quick acknowledgment, flagging, or feedback without sending a full reply.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: { type: 'string', description: 'Channel or DM ID' },
+        timestamp: { type: 'string', description: 'Message timestamp (ts) to react to' },
+        emoji: { type: 'string', description: 'Emoji name without colons (e.g. "thumbsup", "eyes", "white_check_mark")' },
+      },
+      required: ['channel', 'timestamp', 'emoji'],
+    },
+  },
+  {
+    name: 'pin_message',
+    description: 'Pin or unpin a message in a Slack channel. Pinned messages are easy to find in the channel details.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: { type: 'string', description: 'Channel or DM ID' },
+        timestamp: { type: 'string', description: 'Message timestamp (ts) to pin/unpin' },
+        action: { type: 'string', enum: ['pin', 'unpin'], description: 'Whether to pin or unpin (default: pin)' },
+      },
+      required: ['channel', 'timestamp'],
+    },
+  },
 ];
 
-// ─── Browser Session Manager ─────────────────────────────────────────────────
-const browserSessions = new Map();
-
-async function getBrowserSession(sessionId) {
-  if (sessionId && browserSessions.has(sessionId)) {
-    return browserSessions.get(sessionId);
-  }
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const page = await context.newPage();
-  const id = sessionId || `session-${Date.now()}`;
-  const session = { id, browser, context, page, createdAt: Date.now() };
-  browserSessions.set(id, session);
-  // Auto-close after 5 minutes of inactivity
-  session.timeout = setTimeout(() => closeBrowserSession(id), 5 * 60 * 1000);
-  return session;
-}
-
-async function closeBrowserSession(sessionId) {
-  const session = browserSessions.get(sessionId);
-  if (session) {
-    clearTimeout(session.timeout);
-    await session.browser.close().catch(() => {});
-    browserSessions.delete(sessionId);
-  }
-}
-
-function refreshSessionTimeout(session) {
-  clearTimeout(session.timeout);
-  session.timeout = setTimeout(() => closeBrowserSession(session.id), 5 * 60 * 1000);
-}
+// Browser session manager removed — now handled by Playwright MCP server
 
 async function executeTool(name, input, { slackClient, channel } = {}) {
   try {
@@ -1503,6 +1570,41 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
         let response = `Created: ${file.data.name}\nType: ${fileType}\nID: ${file.data.id}`;
         if (file.data.webViewLink) response += `\nLink: ${file.data.webViewLink}`;
         return response;
+      }
+      case 'upload_slack_file_to_drive': {
+        const drive = getJinDriveClient();
+        const parentId = input.folder_id || AI_HUB_FOLDER_ID;
+        // Look up real file info from Slack API (prevents hallucinated URLs)
+        const slackWeb = new (require('@slack/web-api').WebClient)(process.env.SLACK_BOT_TOKEN);
+        const fileInfo = await slackWeb.files.info({ file: input.slack_file_id });
+        if (!fileInfo.file?.url_private_download) {
+          return `Error: Could not find Slack file ${input.slack_file_id} or no download URL available.`;
+        }
+        const slackFile = fileInfo.file;
+        // Download from Slack using verified URL
+        const { base64, mimeType: detectedMime } = await downloadSlackFile(slackFile.url_private_download, process.env.SLACK_BOT_TOKEN);
+        const buffer = Buffer.from(base64, 'base64');
+        if (buffer.length < 500) {
+          return `Error: Download failed — got ${buffer.length} bytes (expected an image/file). Slack may have returned an error page.`;
+        }
+        const mime = slackFile.mimetype || detectedMime || 'application/octet-stream';
+        const { Readable } = require('stream');
+        const fileName = input.filename || slackFile.name || 'file';
+        const file = await drive.files.create({
+          requestBody: {
+            name: fileName,
+            parents: [parentId],
+          },
+          media: { mimeType: mime, body: Readable.from(buffer) },
+          fields: 'id,name,webViewLink',
+        });
+        // Make viewable via link
+        await drive.permissions.create({
+          fileId: file.data.id,
+          requestBody: { role: 'reader', type: 'anyone' },
+        });
+        const link = `https://drive.google.com/file/d/${file.data.id}/view`;
+        return `Uploaded: ${file.data.name} (${(buffer.length / 1024).toFixed(0)}KB)\nID: ${file.data.id}\nLink: ${link}`;
       }
       case 'list_drive_files': {
         const drive = getJinDriveClient();
@@ -1618,82 +1720,7 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
         );
         return `Sheet: ${targetSheet} (${rows.length - 1} rows)\n\n${data.slice(0, 50).join('\n')}${data.length > 50 ? `\n\n...${data.length - 50} more rows` : ''}`;
       }
-      case 'web_search': {
-        const apiKey = process.env.BRAVE_SEARCH_API_KEY;
-        if (!apiKey) return 'Error: BRAVE_SEARCH_API_KEY not set in .env';
-        const count = Math.min(input.count || 5, 20);
-        const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(input.query)}&count=${count}`;
-        const searchResult = await new Promise((resolve, reject) => {
-          https.get(searchUrl, {
-            headers: { 'Accept': 'application/json', 'X-Subscription-Token': apiKey },
-          }, (res) => {
-            const chunks = [];
-            res.on('data', (c) => chunks.push(c));
-            res.on('end', () => {
-              try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-              catch (e) { reject(new Error(`Brave Search parse error: ${e.message} (status ${res.statusCode})`)); }
-            });
-          }).on('error', reject);
-        });
-        const results = (searchResult.web?.results || []).map((r, i) =>
-          `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.description || ''}`
-        );
-        if (results.length === 0) return 'No results found.';
-        return results.join('\n\n');
-      }
-      case 'browse_web': {
-        const waitSec = Math.min(input.wait_seconds || 3, 15);
-        let browser;
-        try {
-          browser = await chromium.launch({ headless: true });
-          const page = await browser.newPage();
-          await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          await page.waitForTimeout(waitSec * 1000);
-          // Extract readable text content
-          const text = await page.evaluate(() => {
-            // Remove script/style elements
-            document.querySelectorAll('script, style, noscript').forEach(el => el.remove());
-            return document.body?.innerText || document.documentElement?.innerText || '';
-          });
-          const title = await page.title();
-          const cleaned = text.replace(/\n{3,}/g, '\n\n').trim();
-          return `Title: ${title}\nURL: ${input.url}\n\n${cleaned}`.slice(0, MAX_URL_CHARS);
-        } finally {
-          if (browser) await browser.close();
-        }
-      }
-      case 'screenshot_webpage': {
-        let browser;
-        try {
-          browser = await chromium.launch({ headless: true });
-          const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-          await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          await page.waitForTimeout(2000);
-          const timestamp = Date.now();
-          const screenshotPath = `/tmp/screenshot-${timestamp}.png`;
-          await page.screenshot({
-            path: screenshotPath,
-            fullPage: input.full_page || false,
-          });
-          // Upload to Slack inline
-          if (slackClient && channel) {
-            try {
-              const fs = require('fs');
-              await slackClient.files.uploadV2({
-                channel_id: channel,
-                file: fs.createReadStream(screenshotPath),
-                filename: `screenshot-${timestamp}.png`,
-                initial_comment: `Screenshot: ${input.url}`,
-              });
-            } catch (uploadErr) {
-              console.warn('  ⚠ Slack screenshot upload failed:', uploadErr.message);
-            }
-          }
-          return `Screenshot saved to ${screenshotPath}`;
-        } finally {
-          if (browser) await browser.close();
-        }
-      }
+      // web_search, browse_web, screenshot_webpage removed — now handled by MCP servers
       case 'get_youtube_transcript': {
         // Extract video ID from URL or use as-is
         const videoIdMatch = input.url.match(/(?:v=|youtu\.be\/|\/v\/|\/embed\/)([a-zA-Z0-9_-]{11})/) ||
@@ -1877,6 +1904,12 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
         const fileInfo = await drive.files.get({ fileId: input.file_id, fields: 'webViewLink,name' });
         results.push(`Link: ${fileInfo.data.webViewLink}`);
         return results.join('\n');
+      }
+      case 'delete_drive_file': {
+        const drive = getJinDriveClient();
+        const fileInfo = await drive.files.get({ fileId: input.file_id, fields: 'name' });
+        await drive.files.delete({ fileId: input.file_id });
+        return `Deleted: ${fileInfo.data.name} (${input.file_id})`;
       }
       // ─── QBO Tool Implementations ─────────────────────────────────────────────
       case 'qbo_companies': {
@@ -2130,105 +2163,7 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
           return `[${date}] ${who}: ${(m.text || '').slice(0, 300)}`;
         }).join('\n\n');
       }
-      case 'browser_session': {
-        const session = await getBrowserSession(input.session_id);
-        refreshSessionTimeout(session);
-        const { page } = session;
-
-        switch (input.action) {
-          case 'goto': {
-            if (!input.url) return `Error: url required for goto action. Session ID: ${session.id}`;
-            await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await page.waitForTimeout(2000);
-            const title = await page.title();
-            return `Navigated to: ${title}\nURL: ${page.url()}\nSession ID: ${session.id}`;
-          }
-          case 'click': {
-            if (!input.selector) return 'Error: selector required for click action.';
-            await page.waitForSelector(input.selector, { timeout: 5000 });
-            await page.click(input.selector);
-            await page.waitForTimeout(1000);
-            return `Clicked: ${input.selector}\nCurrent URL: ${page.url()}\nSession ID: ${session.id}`;
-          }
-          case 'type': {
-            if (!input.selector || !input.text) return 'Error: selector and text required for type action.';
-            await page.waitForSelector(input.selector, { timeout: 5000 });
-            await page.fill(input.selector, input.text);
-            return `Typed into ${input.selector}\nSession ID: ${session.id}`;
-          }
-          case 'select': {
-            if (!input.selector || !input.text) return 'Error: selector and text (option value) required for select action.';
-            await page.waitForSelector(input.selector, { timeout: 5000 });
-            await page.selectOption(input.selector, input.text);
-            return `Selected "${input.text}" in ${input.selector}\nSession ID: ${session.id}`;
-          }
-          case 'scroll': {
-            const dir = input.direction === 'up' ? -500 : 500;
-            await page.evaluate((d) => window.scrollBy(0, d), dir);
-            await page.waitForTimeout(500);
-            return `Scrolled ${input.direction || 'down'}\nSession ID: ${session.id}`;
-          }
-          case 'extract': {
-            if (input.selector) {
-              const elements = await page.$$(input.selector);
-              const texts = [];
-              for (const el of elements.slice(0, 50)) {
-                const text = await el.innerText().catch(() => '');
-                if (text.trim()) texts.push(text.trim());
-              }
-              return texts.length > 0
-                ? `Found ${texts.length} elements:\n\n${texts.join('\n---\n').slice(0, 8000)}\nSession ID: ${session.id}`
-                : `No text found for selector: ${input.selector}\nSession ID: ${session.id}`;
-            }
-            // Extract full page text
-            const text = await page.evaluate(() => {
-              document.querySelectorAll('script, style, noscript').forEach(el => el.remove());
-              return document.body?.innerText || '';
-            });
-            const title = await page.title();
-            return `Title: ${title}\nURL: ${page.url()}\n\n${text.replace(/\n{3,}/g, '\n\n').trim().slice(0, 8000)}\nSession ID: ${session.id}`;
-          }
-          case 'screenshot': {
-            const screenshotPath = `/tmp/browser-${session.id}-${Date.now()}.png`;
-            await page.screenshot({ path: screenshotPath, fullPage: false });
-            // Upload to Slack so the user can actually see it
-            if (slackClient && channel) {
-              try {
-                const fs = require('fs');
-                await slackClient.files.uploadV2({
-                  channel_id: channel,
-                  file: fs.createReadStream(screenshotPath),
-                  filename: `screenshot-${Date.now()}.png`,
-                  initial_comment: `Browser screenshot: ${page.url()}`,
-                });
-              } catch (uploadErr) {
-                console.warn('  ⚠ Slack browser screenshot upload failed:', uploadErr.message);
-              }
-            }
-            return `Screenshot saved and uploaded to Slack: ${screenshotPath}\nSession ID: ${session.id}`;
-          }
-          case 'wait': {
-            const waitSec = Math.min(input.wait_seconds || 3, 15);
-            if (input.selector) {
-              await page.waitForSelector(input.selector, { timeout: waitSec * 1000 });
-              return `Element found: ${input.selector}\nSession ID: ${session.id}`;
-            }
-            await page.waitForTimeout(waitSec * 1000);
-            return `Waited ${waitSec} seconds.\nSession ID: ${session.id}`;
-          }
-          case 'back': {
-            await page.goBack({ waitUntil: 'domcontentloaded', timeout: 10000 });
-            await page.waitForTimeout(1000);
-            return `Went back to: ${page.url()}\nSession ID: ${session.id}`;
-          }
-          case 'close': {
-            await closeBrowserSession(session.id);
-            return `Browser session ${session.id} closed.`;
-          }
-          default:
-            return `Unknown browser action: ${input.action}`;
-        }
-      }
+      // browser_session removed — now handled by Playwright MCP server
       case 'run_shell': {
         const { execSync } = require('child_process');
         const timeoutMs = Math.min((input.timeout_seconds || 30), 120) * 1000;
@@ -2538,7 +2473,59 @@ async function executeTool(name, input, { slackClient, channel } = {}) {
         if (res.error) return `Error: ${res.error.message || JSON.stringify(res.error)}`;
         return res.text || '(no transcription returned)';
       }
+      case 'delete_slack_message': {
+        if (!slackClient) return 'Error: No Slack client available';
+        try {
+          await slackClient.chat.delete({ channel: input.channel, ts: input.timestamp });
+          return `Deleted message ${input.timestamp} from ${input.channel}`;
+        } catch (err) {
+          return `Error deleting message: ${err.data?.error || err.message}`;
+        }
+      }
+
+      case 'list_slack_messages': {
+        if (!slackClient) return 'Error: No Slack client available';
+        const limit = Math.min(input.limit || 50, 200);
+        const opts = { channel: input.channel, limit };
+        if (input.oldest) opts.oldest = input.oldest;
+        if (input.latest) opts.latest = input.latest;
+        const result = await slackClient.conversations.history(opts);
+        const msgs = (result.messages || []).map(m => ({
+          ts: m.ts,
+          user: m.user || m.bot_id || 'unknown',
+          bot: !!m.bot_id,
+          text: (m.text || '').slice(0, 300),
+          date: new Date(parseFloat(m.ts) * 1000).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }),
+        }));
+        return JSON.stringify(msgs, null, 2);
+      }
+
+      case 'react_to_message': {
+        if (!slackClient) return 'Error: No Slack client available';
+        await slackClient.reactions.add({
+          channel: input.channel,
+          timestamp: input.timestamp,
+          name: input.emoji,
+        });
+        return `Added :${input.emoji}: to message ${input.timestamp}`;
+      }
+
+      case 'pin_message': {
+        if (!slackClient) return 'Error: No Slack client available';
+        const action = input.action || 'pin';
+        if (action === 'unpin') {
+          await slackClient.pins.remove({ channel: input.channel, timestamp: input.timestamp });
+          return `Unpinned message ${input.timestamp}`;
+        }
+        await slackClient.pins.add({ channel: input.channel, timestamp: input.timestamp });
+        return `Pinned message ${input.timestamp}`;
+      }
+
       default:
+        // Check if this is an MCP tool
+        if (mcpToolMap.has(name)) {
+          return await callMCPTool(name, input);
+        }
         return `Unknown tool: ${name}`;
     }
   } catch (err) {
@@ -2573,7 +2560,7 @@ function runClaudeCode(task, cwd) {
   });
 }
 
-// ─── Mac Mini heartbeat check (Render only) ───────────────────────────────────
+// ─── Mac Mini heartbeat check (Hetzner standby only) ─────────────────────────
 
 async function checkMacMiniAlive() {
   try {
@@ -2592,7 +2579,7 @@ async function checkMacMiniAlive() {
     return (Date.now() - lastBeat) < HEARTBEAT_STALENESS_MS;
   } catch (err) {
     console.warn('  ✗ Heartbeat check failed:', err.message);
-    return false; // can't check = assume down, let Render respond
+    return false; // can't check = assume down, let standby respond
   }
 }
 
@@ -2600,11 +2587,144 @@ async function checkMacMiniAlive() {
 
 const anthropic = new Anthropic({ apiKey: (process.env.ANTHROPIC_API_KEY || '').replace(/\s+/g, '') });
 
+// ─── Usage Tracking ───────────────────────────────────────────────────────────
+
+const USAGE_LOG_PATH = './usage-log.json';
+
+// Pricing per million tokens (as of Feb 2026)
+const MODEL_PRICING = {
+  'claude-sonnet-4-6':       { input: 3.00, output: 15.00, cacheWrite: 3.75, cacheRead: 0.30 },
+  'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00, cacheWrite: 1.00, cacheRead: 0.08 },
+};
+
+function loadUsageLog() {
+  try {
+    if (fs.existsSync(USAGE_LOG_PATH)) return JSON.parse(fs.readFileSync(USAGE_LOG_PATH, 'utf8'));
+  } catch {}
+  return [];
+}
+
+function saveUsageLog(log) {
+  fs.writeFileSync(USAGE_LOG_PATH, JSON.stringify(log), 'utf8');
+}
+
+function logUsage({ model, usage, context: ctx, slackUser }) {
+  if (!usage) return;
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING['claude-sonnet-4-6'];
+  const inputTokens = usage.input_tokens || 0;
+  const outputTokens = usage.output_tokens || 0;
+  const cacheCreation = usage.cache_creation_input_tokens || 0;
+  const cacheRead = usage.cache_read_input_tokens || 0;
+
+  const cost = (inputTokens * pricing.input / 1e6)
+    + (outputTokens * pricing.output / 1e6)
+    + (cacheCreation * pricing.cacheWrite / 1e6)
+    + (cacheRead * pricing.cacheRead / 1e6);
+
+  const entry = {
+    ts: Date.now(),
+    date: new Date().toISOString(),
+    model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_creation_tokens: cacheCreation,
+    cache_read_tokens: cacheRead,
+    cost: Math.round(cost * 1e6) / 1e6, // 6 decimal places
+    context: ctx || 'unknown',
+    user: slackUser || 'system',
+  };
+
+  const log = loadUsageLog();
+  log.push(entry);
+  saveUsageLog(log);
+  return entry;
+}
+
+function getUsageReport(days = 7) {
+  const log = loadUsageLog();
+  const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+  const recent = log.filter(e => e.ts >= cutoff);
+
+  if (recent.length === 0) return { totalCost: 0, totalInput: 0, totalOutput: 0, byModel: {}, byContext: {}, byUser: {}, callCount: 0, days };
+
+  let totalCost = 0, totalInput = 0, totalOutput = 0;
+  const byModel = {}, byContext = {}, byUser = {};
+
+  for (const e of recent) {
+    totalCost += e.cost;
+    totalInput += e.input_tokens;
+    totalOutput += e.output_tokens;
+
+    if (!byModel[e.model]) byModel[e.model] = { cost: 0, calls: 0, input: 0, output: 0 };
+    byModel[e.model].cost += e.cost;
+    byModel[e.model].calls++;
+    byModel[e.model].input += e.input_tokens;
+    byModel[e.model].output += e.output_tokens;
+
+    if (!byContext[e.context]) byContext[e.context] = { cost: 0, calls: 0 };
+    byContext[e.context].cost += e.cost;
+    byContext[e.context].calls++;
+
+    if (!byUser[e.user]) byUser[e.user] = { cost: 0, calls: 0, input: 0, output: 0 };
+    byUser[e.user].cost += e.cost;
+    byUser[e.user].calls++;
+    byUser[e.user].input += e.input_tokens;
+    byUser[e.user].output += e.output_tokens;
+  }
+
+  return { totalCost, totalInput, totalOutput, byModel, byContext, byUser, callCount: recent.length, days };
+}
+
+function formatUsageReport(days = 7) {
+  const r = getUsageReport(days);
+  if (r.callCount === 0) return `No API usage recorded in the last ${days} day(s).`;
+
+  let report = `*AI Infrastructure Spend — Last ${days} Day(s)*\n\n`;
+  report += `Total: *$${r.totalCost.toFixed(2)}* across ${r.callCount} API calls\n`;
+  report += `Tokens: ${(r.totalInput / 1000).toFixed(1)}K in / ${(r.totalOutput / 1000).toFixed(1)}K out\n`;
+
+  // Projected monthly
+  const dailyAvg = r.totalCost / days;
+  report += `Projected monthly: ~$${(dailyAvg * 30).toFixed(2)}\n\n`;
+
+  // By model
+  report += `*By Model:*\n`;
+  for (const [model, data] of Object.entries(r.byModel)) {
+    const shortName = model.replace('claude-', '').replace('-20251001', '');
+    report += `  ${shortName}: $${data.cost.toFixed(2)} (${data.calls} calls)\n`;
+  }
+
+  // By context (conversation vs background tasks)
+  report += `\n*By Category:*\n`;
+  const sortedCtx = Object.entries(r.byContext).sort((a, b) => b[1].cost - a[1].cost);
+  for (const [ctx, data] of sortedCtx) {
+    report += `  ${ctx}: $${data.cost.toFixed(2)} (${data.calls} calls)\n`;
+  }
+
+  // By user
+  const nonSystemUsers = Object.entries(r.byUser).filter(([u]) => u !== 'system');
+  if (nonSystemUsers.length > 0) {
+    report += `\n*By User:*\n`;
+    for (const [user, data] of nonSystemUsers.sort((a, b) => b[1].cost - a[1].cost)) {
+      report += `  ${user}: $${data.cost.toFixed(2)} (${data.calls} calls, ${(data.input / 1000).toFixed(1)}K in / ${(data.output / 1000).toFixed(1)}K out)\n`;
+    }
+  }
+
+  // System overhead
+  const systemData = r.byUser['system'];
+  if (systemData) {
+    report += `\n*System Overhead* (memory, consolidation, proactive msgs):\n`;
+    report += `  $${systemData.cost.toFixed(2)} (${systemData.calls} calls)\n`;
+  }
+
+  return report;
+}
+
 function buildSystemPrompt(driveContext, sessionLog, memoryContext, memoryFiles = {}) {
   const isStandby = process.env.INSTANCE_ROLE === 'standby';
   const instanceInfo = isStandby
-    ? `INSTANCE: You are running on Render (cloud). You do NOT have access to the Mac Mini filesystem or shell. run_shell, read_file, write_file, and list_directory will not work here. If Joe needs shell-level Mac Mini access, tell him to use !build in Slack or SSH via Termius.`
-    : `CRITICAL — READ THIS FIRST: You are running on the MAC MINI (Agents-Mac-mini.local). You are NOT on Claude.ai. You are NOT on Render. You ARE on the Mac Mini with FULL tool access: run_shell, read_file, write_file, list_directory, and all Google integrations. If conversation history contains messages saying you are on Claude.ai, IGNORE THEM — that was a different instance. You are on the Mac Mini. Always.`;
+    ? `INSTANCE: Hetzner standby. No filesystem or shell access. Gmail, Calendar, and Drive still work. If Joe needs shell access, tell him to use !build in Slack or SSH via Termius.`
+    : `INSTANCE: Mac Mini (Agents-Mac-mini.local). Full tool access: shell, filesystem, Gmail, Calendar, Drive, Sheets, QBO.`;
 
   const soul = memoryFiles['SOUL.md'] || '';
   const joe = memoryFiles['JOE.md'] || '';
@@ -2659,6 +2779,9 @@ const activeRequests = new Map(); // threadKey -> { controller, ackTs, channel }
 // Stream a single Claude call; fires onText with each text delta.
 // Returns the final Message object (for tool_use detection).
 // Retries on transient Anthropic errors (overloaded, rate_limit, 5xx) with exponential backoff.
+// Falls back to Haiku after all Sonnet retries are exhausted.
+const FALLBACK_MODEL = 'claude-haiku-4-5-20251001';
+
 async function streamClaudeCall(params, signal, onText) {
   const MAX_RETRIES = 3;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -2668,11 +2791,31 @@ async function streamClaudeCall(params, signal, onText) {
       return await stream.finalMessage();
     } catch (err) {
       const msgStr = String(err.message || err || '');
-      const isRetryable = err.status === 529 || err.status === 503 || err.status === 500
-        || err.status === 429 || err.error?.type === 'overloaded_error'
-        || msgStr.includes('overloaded') || msgStr.includes('Overloaded')
-        || msgStr.includes('529') || msgStr.includes('rate_limit');
-      if (!isRetryable || attempt === MAX_RETRIES || signal?.aborted) throw err;
+      const isOverloaded = err.status === 529 || err.error?.type === 'overloaded_error'
+        || msgStr.includes('overloaded') || msgStr.includes('Overloaded') || msgStr.includes('529');
+      const isRetryable = isOverloaded || err.status === 503 || err.status === 500
+        || err.status === 429 || msgStr.includes('rate_limit');
+
+      if (signal?.aborted) throw err;
+
+      // After all retries exhausted on Sonnet, fall back to Haiku
+      if (attempt === MAX_RETRIES && isOverloaded && params.model !== FALLBACK_MODEL) {
+        console.warn(`  ↻ Sonnet exhausted ${MAX_RETRIES + 1} attempts — falling back to Haiku`);
+        onText('\n_(Sonnet is overloaded — switching to Haiku for this response)_\n');
+        const fallbackParams = { ...params, model: FALLBACK_MODEL };
+        try {
+          const stream = anthropic.messages.stream(fallbackParams, { signal });
+          stream.on('text', (text) => onText(text));
+          const msg = await stream.finalMessage();
+          msg._fallbackModel = FALLBACK_MODEL; // tag so usage tracking logs the right model
+          return msg;
+        } catch (fallbackErr) {
+          console.error('  ✗ Haiku fallback also failed:', fallbackErr.message);
+          throw err; // throw original Sonnet error
+        }
+      }
+
+      if (!isRetryable || attempt === MAX_RETRIES) throw err;
       const delay = Math.min(2000 * Math.pow(2, attempt) + Math.random() * 1000, 15000);
       console.warn(`  ↻ Anthropic ${err.status || 'overloaded'} — retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
       await new Promise(r => setTimeout(r, delay));
@@ -2680,7 +2823,7 @@ async function streamClaudeCall(params, signal, onText) {
   }
 }
 
-async function callClaude(systemPrompt, history, userContent, signal, onUpdate, { slackClient, channel } = {}) {
+async function callClaude(systemPrompt, history, userContent, signal, onUpdate, { slackClient, channel, slackUser } = {}) {
   const messageContent = typeof userContent === 'string' ? userContent : userContent.content;
   const messages = [...history, { role: 'user', content: messageContent }];
 
@@ -2699,10 +2842,14 @@ async function callClaude(systemPrompt, history, userContent, signal, onUpdate, 
     }
   }
 
-  const params = { model: 'claude-sonnet-4-6', max_tokens: 4096, system: systemPrompt, messages, tools: TOOLS };
+  const allTools = [...TOOLS, ...mcpTools];
+  const params = { model: 'claude-sonnet-4-6', max_tokens: 4096, system: systemPrompt, messages, tools: allTools };
   let response = await streamClaudeCall(params, signal, handleDelta);
   // Final update without cursor
   if (onUpdate && accumulatedText) onUpdate(accumulatedText);
+
+  // Track usage for this call (use fallback model if Haiku was used)
+  logUsage({ model: response._fallbackModel || params.model, usage: response.usage, context: 'conversation', slackUser });
 
   // Agentic loop — keep going while Claude wants to use tools
   while (response.stop_reason === 'tool_use') {
@@ -2732,6 +2879,9 @@ async function callClaude(systemPrompt, history, userContent, signal, onUpdate, 
 
     response = await streamClaudeCall(params, signal, handleDelta);
     if (onUpdate && accumulatedText) onUpdate(accumulatedText);
+
+    // Track each tool-loop iteration
+    logUsage({ model: response._fallbackModel || params.model, usage: response.usage, context: 'conversation-tool-loop', slackUser });
   }
 
   return response.content.find((b) => b.type === 'text')?.text || '(no response)';
@@ -2812,6 +2962,7 @@ USER: ${userSnippet}
 ASSISTANT: ${assistantSnippet}`,
       }],
     });
+    logUsage({ model: 'claude-haiku-4-5-20251001', usage: response.usage, context: 'fact-extraction' });
 
     let facts;
     try {
@@ -2893,6 +3044,7 @@ Conversation:
 ${recent}`,
       }],
     });
+    logUsage({ model: 'claude-sonnet-4-6', usage: response.usage, context: 'memory-consolidation' });
 
     const summary = response.content[0].text.trim();
     if (!summary || summary.length < 20) return;
@@ -2969,6 +3121,7 @@ For each file that needs updating, output a section like:
 If a file doesn't need updating, skip it entirely. Be concise and factual. Only capture durable knowledge — not transient conversation details.`,
       }],
     });
+    logUsage({ model: 'claude-sonnet-4-6', usage: response.usage, context: 'deep-consolidation' });
 
     const output = response.content[0].text.trim();
     if (!output || output.length < 30) {
@@ -3034,6 +3187,7 @@ Live Log:
 ${liveLogContent.slice(-6000)}`,
     }],
   });
+  logUsage({ model: 'claude-sonnet-4-6', usage: digestResponse.usage, context: 'weekly-digest' });
 
   const digest = digestResponse.content[0].text.trim();
   const week = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -3070,6 +3224,7 @@ Weekly Digests:
 ${digestContent.slice(-8000)}`,
     }],
   });
+  logUsage({ model: 'claude-sonnet-4-6', usage: archiveResponse.usage, context: 'monthly-archive' });
 
   const archive = archiveResponse.content[0].text.trim();
   const month = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -3161,11 +3316,13 @@ function randomWaitPhrase() {
 
 // ─── Message Handler ──────────────────────────────────────────────────────────
 
-async function handleMessage({ text, files, channel, thread_ts, ts, client, systemPrompt, botToken }) {
+async function handleMessage({ text, files, channel, thread_ts, ts, client, systemPrompt, botToken, slackUser }) {
   console.log(`[MSG] channel=${channel} text="${(text || '').slice(0, 80)}"`);
   const isDM = channel.startsWith('D');
-  const threadKey = thread_ts || channel;
-  const replyInThread = !isDM && (thread_ts || ts);
+  // In DMs, never thread — always flat conversation. In channels, thread if replying.
+  const effectiveThreadTs = isDM ? null : thread_ts;
+  const threadKey = effectiveThreadTs || channel;
+  const replyInThread = !isDM && (effectiveThreadTs || ts);
 
   // ── Interrupt: register immediately to prevent race conditions ──
   const controller = new AbortController();
@@ -3183,7 +3340,7 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
   if (process.env.INSTANCE_ROLE === 'standby') {
     const macMiniAlive = await checkMacMiniAlive();
     if (macMiniAlive) { activeRequests.delete(threadKey); return; }
-    systemPrompt = systemPrompt + '\n\n⚠️ FALLBACK MODE: Mac Mini is currently offline. You are responding from Render (cloud). You have Gmail and Calendar access but no shell or filesystem access. Let Joe know you\'re in fallback mode and what you can and can\'t help with.';
+    systemPrompt = systemPrompt + '\n\n⚠️ FALLBACK MODE: Mac Mini is offline. You are responding from Hetzner standby. Gmail, Calendar, and Drive work. No shell or filesystem access. Let Joe know briefly.';
   }
 
   // Post immediate ack — just "ok"
@@ -3225,17 +3382,26 @@ async function handleMessage({ text, files, channel, thread_ts, ts, client, syst
     // Save user message to history now — if interrupted, the next request has context
     appendHistory(threadKey, 'user', userContent);
 
-    // Stream response — update Slack message in real-time as tokens arrive
-    const reply = await callClaude(systemPrompt, history, userContent, controller.signal, (partialText) => {
+    // In DMs: skip streaming updates entirely — chat.update modifies in-place which
+    // makes the response appear stuck "in history". Instead, let the ack sit while
+    // Claude generates, then post the response as a fresh new message at the bottom.
+    const streamCallback = isDM ? null : (partialText) => {
       streamingStarted = true;
       clearTimeout(waitTimer);
       client.chat.update({ channel, ts: ackMsg.ts, text: partialText }).catch(() => {});
-    }, { slackClient: client, channel });
+    };
+
+    const reply = await callClaude(systemPrompt, history, userContent, controller.signal, streamCallback, { slackClient: client, channel, slackUser });
 
     appendHistory(threadKey, 'assistant', reply);
 
-    // Final update (without cursor)
-    await client.chat.update({ channel, ts: ackMsg.ts, text: reply });
+    if (isDM) {
+      // Post the new message first (lands at bottom), then clean up the ack
+      await client.chat.postMessage({ channel, text: reply });
+      client.chat.delete({ channel, ts: ackMsg.ts }).catch(() => {});
+    } else {
+      await client.chat.update({ channel, ts: ackMsg.ts, text: reply });
+    }
 
     // Observational memory — extract facts in background (fire-and-forget)
     extractAndSaveFacts(userContent, reply).catch(() => {});
@@ -3355,6 +3521,9 @@ async function main() {
     const qboCompanies = Object.values(qboTokens).map(t => t.companyName).filter(Boolean);
     if (qboCompanies.length > 0) console.log(`  ✓ QBO connected: ${qboCompanies.join(', ')}`);
   } catch {}
+
+  // Connect MCP servers (Brave Search, Playwright, etc.)
+  await connectMCPServers();
 
   let driveContext = '';
   try {
@@ -3622,6 +3791,15 @@ a.btn{display:inline-block;background:#2CA01C;color:#fff;padding:12px 32px;borde
       return;
     }
 
+    // !usage [days] — show AI infrastructure spend report
+    if (resolvedText.startsWith('!usage')) {
+      const daysMatch = resolvedText.match(/!usage\s+(\d+)/);
+      const days = daysMatch ? parseInt(daysMatch[1], 10) : 7;
+      const report = formatUsageReport(days);
+      await client.chat.postMessage({ channel: message.channel, text: report });
+      return;
+    }
+
     // !build <task> — spawn Claude Code to execute a build task on the Mac Mini
     if (resolvedText.startsWith('!build ')) {
       const task = resolvedText.slice(7).trim();
@@ -3652,6 +3830,7 @@ a.btn{display:inline-block;background:#2CA01C;color:#fff;padding:12px 32px;borde
       client,
       systemPrompt: context.systemPrompt,
       botToken,
+      slackUser: message.user,
     });
   });
 
@@ -3670,6 +3849,7 @@ a.btn{display:inline-block;background:#2CA01C;color:#fff;padding:12px 32px;borde
       client,
       systemPrompt: context.systemPrompt,
       botToken,
+      slackUser: event.user,
     });
   });
 
@@ -3684,7 +3864,7 @@ a.btn{display:inline-block;background:#2CA01C;color:#fff;padding:12px 32px;borde
     await app.start();
     console.log('\nJin is running. (Socket Mode)');
 
-    // Health check server (for monitoring / Render standby)
+    // Health check server (for monitoring / Hetzner standby)
     const healthServer = http.createServer((req, res) => res.end('Jin is alive.'));
     healthServer.listen(port).on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
@@ -3710,6 +3890,7 @@ a.btn{display:inline-block;background:#2CA01C;color:#fff;padding:12px 32px;borde
         system: context.systemPrompt,
         messages: [{ role: 'user', content: prompt }],
       });
+      logUsage({ model: 'claude-sonnet-4-6', usage: response.usage, context: 'proactive-message' });
       const text = response.content[0].text.trim();
       if (text) {
         await app.client.chat.postMessage({ channel: JOE_DM, text });
@@ -3770,6 +3951,18 @@ Keep it concise — a short paragraph. Think like a real Chief of Staff prepping
     );
   }, { timezone: 'America/Los_Angeles' });
 
+  // Weekly AI spend report — Monday at 9:00 AM PST
+  cron.schedule('0 9 * * 1', async () => {
+    console.log('  [CRON] Weekly usage report triggered');
+    try {
+      const report = formatUsageReport(7);
+      await app.client.chat.postMessage({ channel: JOE_DM, text: report });
+      console.log('  [CRON] ✓ Usage report sent');
+    } catch (err) {
+      console.warn('  [CRON] Usage report failed:', err.message);
+    }
+  }, { timezone: 'America/Los_Angeles' });
+
   // Monthly archive — 1st of each month at 10:00 PM PST
   cron.schedule('0 22 1 * *', async () => {
     console.log('  [CRON] Monthly archive triggered');
@@ -3785,7 +3978,134 @@ Keep it concise — a short paragraph. Think like a real Chief of Staff prepping
     }
   }, { timezone: 'America/Los_Angeles' });
 
-  console.log('  ✓ Scheduled: morning briefing (8:30am), EOD wrap-up (6pm), weekly preview (Sun 9pm), monthly archive (1st 10pm) — PST');
+  // ─── Cross-Agent Digest — Friday 8:00 PM PST ─────────────────────────────
+  // Jin reads all agent memory files, synthesizes executive brief, DMs Joe
+  cron.schedule('0 20 * * 5', async () => {
+    console.log('  [CRON] Cross-agent digest triggered');
+    try {
+      const agentDirs = [
+        { name: 'Chip', owner: 'Jessica Vuong', dir: '/Users/agentserver/chip' },
+        { name: 'Lucky', owner: 'Tracy Wang', dir: '/Users/agentserver/lucky' },
+        { name: 'Jack', owner: 'Kathrine Gilmer', dir: '/Users/agentserver/jack' },
+      ];
+      const memFiles = ['SOUL.md', 'JOE.md', 'MEMORY.md', 'CULTURE.md'];
+      let agentContext = '';
+
+      for (const agent of agentDirs) {
+        agentContext += `\n\n=== ${agent.name} (${agent.owner}) ===\n`;
+        for (const f of memFiles) {
+          const p = `${agent.dir}/memory/${f}`;
+          if (fs.existsSync(p)) {
+            const content = fs.readFileSync(p, 'utf8').slice(0, 3000);
+            agentContext += `\n--- ${f} ---\n${content}\n`;
+          }
+        }
+        // Also read conversation history summary if it exists
+        const histPath = `${agent.dir}/conversation-history.json`;
+        if (fs.existsSync(histPath)) {
+          try {
+            const hist = JSON.parse(fs.readFileSync(histPath, 'utf8'));
+            const threadCount = Object.keys(hist).length;
+            agentContext += `\n--- Activity: ${threadCount} conversation thread(s) on file ---\n`;
+          } catch (_) {}
+        }
+      }
+
+      // Also read agent-inbox.json for any reports
+      const inboxPath = path.join(__dirname, 'agent-inbox.json');
+      let inboxContent = '';
+      if (fs.existsSync(inboxPath)) {
+        try {
+          const inbox = JSON.parse(fs.readFileSync(inboxPath, 'utf8'));
+          if (inbox.length > 0) {
+            const recent = inbox.slice(-20);
+            inboxContent = `\n\n=== Agent Reports to Jin (${inbox.length} total, showing last ${recent.length}) ===\n${JSON.stringify(recent, null, 2)}`;
+          }
+        } catch (_) {}
+      }
+
+      const digestPrompt = `You are Jin, doing your Friday evening cross-agent review. You have READ ACCESS to all team agent memory files. Here's what each agent has in their memory:\n${agentContext}${inboxContent}\n\nWrite a concise executive brief for Joe with these sections:\n\n**Key Findings** — What did each agent's owner accomplish or work on this week? What patterns do you see?\n\n**Cross-Functional Insights** — Any dependencies, overlaps, or synergies between what different team members are doing?\n\n**Implications for Joe** — What should Joe know, act on, or think about based on this data?\n\nKeep it tight — this is a Friday evening summary, not a report. Natural prose, Jin's voice. If an agent has no meaningful activity yet, say so briefly and move on.`;
+
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: context.systemPrompt,
+        messages: [{ role: 'user', content: digestPrompt }],
+      });
+      logUsage({ model: 'claude-sonnet-4-6', usage: response.usage, context: 'cross-agent-digest' });
+
+      const brief = response.content[0].text.trim();
+      if (brief) {
+        await app.client.chat.postMessage({ channel: JOE_DM, text: brief });
+        console.log(`  [CRON] ✓ Cross-agent digest sent (${brief.length} chars)`);
+
+        // Write digest to Jin's memory via write_to_memory tool pattern
+        const digestNote = `\n\n--- Cross-Agent Digest (${new Date().toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' })}) ---\n${brief.slice(0, 2000)}`;
+        const liveLogPath = './memory/MEMORY.md';
+        if (fs.existsSync(liveLogPath)) {
+          fs.appendFileSync(liveLogPath, digestNote);
+          console.log('  [CRON] ✓ Digest appended to Jin memory');
+        }
+      }
+
+      // Clear processed inbox items
+      if (fs.existsSync(inboxPath)) {
+        try {
+          const inbox = JSON.parse(fs.readFileSync(inboxPath, 'utf8'));
+          if (inbox.length > 0) {
+            // Archive to processed file, clear inbox
+            const archivePath = path.join(__dirname, 'agent-inbox-archive.json');
+            let archive = [];
+            if (fs.existsSync(archivePath)) {
+              try { archive = JSON.parse(fs.readFileSync(archivePath, 'utf8')); } catch (_) {}
+            }
+            archive.push(...inbox);
+            fs.writeFileSync(archivePath, JSON.stringify(archive, null, 2));
+            fs.writeFileSync(inboxPath, '[]');
+            console.log(`  [CRON] ✓ Archived ${inbox.length} inbox items`);
+          }
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('  [CRON] Cross-agent digest failed:', err.message);
+    }
+  }, { timezone: 'America/Los_Angeles' });
+
+  // ─── Agent Inbox Check — every 30 minutes during work hours ─────────────
+  // Reads agent-inbox.json for urgent reports from Chip/Lucky/Jack, alerts Joe if needed
+  cron.schedule('*/30 6-22 * * *', async () => {
+    const inboxPath = path.join(__dirname, 'agent-inbox.json');
+    if (!fs.existsSync(inboxPath)) return;
+    try {
+      const inbox = JSON.parse(fs.readFileSync(inboxPath, 'utf8'));
+      // Only alert on items marked urgent or flagged for immediate attention
+      const urgent = inbox.filter(item => item.urgent || item.priority === 'high');
+      if (urgent.length === 0) return;
+
+      console.log(`  [CRON] Agent inbox: ${urgent.length} urgent item(s) found`);
+      const urgentSummary = urgent.map(item =>
+        `[${item.agent}] ${item.summary || item.observation || JSON.stringify(item).slice(0, 200)}`
+      ).join('\n');
+
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 800,
+        system: context.systemPrompt,
+        messages: [{ role: 'user', content: `An agent on your team flagged something urgent. Here's what came in:\n\n${urgentSummary}\n\nBriefly relay this to Joe as Jin — what it is, which agent reported it, and whether Joe needs to act now or if it can wait. Be direct.` }],
+      });
+      logUsage({ model: 'claude-sonnet-4-6', usage: response.usage, context: 'agent-inbox-urgent' });
+
+      const text = response.content[0].text.trim();
+      if (text) {
+        await app.client.chat.postMessage({ channel: JOE_DM, text });
+        console.log(`  [CRON] ✓ Urgent agent report relayed to Joe`);
+      }
+    } catch (err) {
+      console.warn('  [CRON] Agent inbox check failed:', err.message);
+    }
+  }, { timezone: 'America/Los_Angeles' });
+
+  console.log('  ✓ Scheduled: morning briefing (8:30am), EOD wrap-up (6pm), weekly preview (Sun 9pm), usage report (Mon 9am), monthly archive (1st 10pm), cross-agent digest (Fri 8pm), inbox check (every 30min) — PST');
 
   // ─── Graceful shutdown ──────────────────────────────────────────────────────
   // Graceful shutdown — properly disconnect so Slack doesn't keep stale connections (Socket Mode)

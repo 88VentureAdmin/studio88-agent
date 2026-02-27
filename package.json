@@ -13,6 +13,7 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@slack/bolt": "^4.6.0",
     "dotenv": "^17.3.1",
     "googleapis": "^171.4.0",
@@ -20,6 +21,7 @@
     "node-cron": "^4.2.1",
     "pdf-parse": "^1.1.1",
     "playwright": "^1.58.2",
-    "youtube-transcript": "^1.2.1"
+    "youtube-transcript": "^1.2.1",
+    "zod": "^4.3.6"
   }
 }
